@@ -1,5 +1,5 @@
 """
-LSE Stock Analyser  v3.1
+LSE Stock Analyser  v4.0
 ========================
 Screens London Stock Exchange (FTSE 100/250) tickers using technical
 indicators and momentum signals to identify the 5 stocks most likely to
@@ -26,7 +26,7 @@ Previous features (v2.0):
   ✔  CSV logging
 
 Dependencies:
-    pip install yfinance pandas numpy ta rich
+    pip install yfinance pandas numpy ta rich lxml requests
 
 Usage:
     python lse_stock_analyser.py
@@ -44,6 +44,7 @@ warnings.filterwarnings("ignore")
 import os
 import sys
 import csv
+import json
 import math
 import contextlib
 import yfinance as yf
@@ -74,34 +75,223 @@ def silent():
             sys.stderr = old_stderr
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TICKER UNIVERSE
+# TICKER UNIVERSE — JSON-backed with Wikipedia auto-update
 # ─────────────────────────────────────────────────────────────────────────────
-TICKERS = {
-    "SHEL.L": "Energy",       "BP.L":   "Energy",       "MRO.L":  "Energy",
-    "RIO.L":  "Mining",       "AAL.L":  "Mining",       "GLEN.L": "Mining",    "ANTO.L": "Mining",
-    "HSBA.L": "Banking",      "BARC.L": "Banking",      "LLOY.L": "Banking",
-    "NWG.L":  "Banking",      "STAN.L": "Banking",
-    "AV.L":   "Insurance",    "MNG.L":  "Insurance",    "PRU.L":  "Insurance",
-    "LSEG.L": "FinServices",  "FLTR.L": "FinServices",
-    "AZN.L":  "Pharma",       "GSK.L":  "Pharma",
-    "ULVR.L": "ConsStaples",  "BATS.L": "ConsStaples",  "IMB.L":  "ConsStaples",
-    "DGE.L":  "ConsStaples",  "ABF.L":  "ConsStaples",
-    "JD.L":   "ConsDis",      "MKS.L":  "ConsDis",      "BRBY.L": "ConsDis",
-    "AUTO.L": "ConsDis",      "SBRY.L": "ConsDis",      "TSCO.L": "ConsDis",
-    "BA.L":   "Industrials",  "RR.L":   "Industrials",  "WEIR.L": "Industrials",
-    "SMT.L":  "Industrials",  "BNZL.L": "Industrials",  "EXPN.L": "Industrials",
-    "REL.L":  "Tech",         "SGE.L":  "Tech",         "RMV.L":  "Tech",
-    "WPP.L":  "Media",        "PSON.L": "Media",
-    "VOD.L":  "Telecoms",     "BT-A.L": "Telecoms",
-    "NG.L":   "Utilities",    "SSE.L":  "Utilities",
-    "LAND.L": "RealEstate",   "SGRO.L": "RealEstate",   "BLND.L": "RealEstate",
-    "BKG.L":  "RealEstate",   "PSN.L":  "RealEstate",
-    "IHG.L":  "Leisure",      "IAG.L":  "Leisure",      "EZJ.L":  "Leisure",
-    "CRH.L":  "Materials",    "MNDI.L": "Materials",    "DPLM.L": "Materials",
-    "HLMA.L": "CapGoods",     "KGF.L":  "Retail",       "OCDO.L": "Retail",
-    "CPG.L":  "ConsDis",      "CNA.L":  "Industrials",  "WTB.L":  "ConsDis",
-    "CRDA.L": "Chemicals",    "INF.L":  "Industrials",
+
+TICKERS_JSON = "ftse_tickers.json"
+
+# Emergency bootstrap — used ONLY on the very first run if there is no JSON
+# file and no internet connection. After the first successful Wikipedia fetch
+# this list is never used again; the JSON file takes over as the fallback.
+EMERGENCY_BOOTSTRAP = {
+    "AZN.L": "Pharma",    "SHEL.L": "Energy",   "HSBA.L": "Banking",
+    "ULVR.L": "ConsStaples", "BP.L": "Energy",   "RIO.L":  "Mining",
+    "GSK.L":  "Pharma",   "LSEG.L": "FinServices", "NG.L": "Utilities",
+    "VOD.L":  "Telecoms", "BARC.L": "Banking",   "LLOY.L": "Banking",
+    "NWG.L":  "Banking",  "BATS.L": "ConsStaples", "DGE.L": "ConsStaples",
+    "PRU.L":  "Insurance","RR.L":   "Industrials", "IAG.L": "Leisure",
+    "SSE.L":  "Utilities","REL.L":  "Tech",
 }
+
+# ICB sector name normalisation — maps Wikipedia's verbose names to short labels
+SECTOR_MAP = {
+    "Automobiles & Parts":                  "ConsDis",
+    "Banks":                                "Banking",
+    "Basic Resources":                      "Mining",
+    "Chemicals":                            "Chemicals",
+    "Construction & Materials":             "Materials",
+    "Consumer Products & Services":         "ConsDis",
+    "Energy":                               "Energy",
+    "Financial Services":                   "FinServices",
+    "Food, Beverage & Tobacco":             "ConsStaples",
+    "Health Care":                          "Pharma",
+    "Industrial Goods & Services":          "Industrials",
+    "Insurance":                            "Insurance",
+    "Investment Trusts":                    "FinServices",
+    "Media":                                "Media",
+    "Personal Care, Drug & Grocery Stores": "Retail",
+    "Real Estate":                          "RealEstate",
+    "Retail":                               "Retail",
+    "Technology":                           "Tech",
+    "Telecommunications":                   "Telecoms",
+    "Travel & Leisure":                     "Leisure",
+    "Utilities":                            "Utilities",
+}
+
+
+def load_json_tickers() -> dict | None:
+    """Load tickers from the JSON cache file. Returns None if the file doesn't exist."""
+    if not os.path.isfile(TICKERS_JSON):
+        return None
+    try:
+        with open(TICKERS_JSON, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        tickers = data.get("tickers", {})
+        if len(tickers) >= 20:
+            return tickers
+    except Exception:
+        pass
+    return None
+
+
+def save_json_tickers(tickers: dict):
+    """Save the freshly fetched ticker list to the JSON cache file."""
+    data = {
+        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "source":       "Wikipedia",
+        "count":        len(tickers),
+        "tickers":      tickers,
+    }
+    with open(TICKERS_JSON, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+
+def fetch_from_wikipedia() -> dict | None:
+    """
+    Attempt to scrape the current FTSE 100 and FTSE 250 constituent lists
+    from Wikipedia. Uses requests with a browser user agent to avoid 403
+    blocks, then passes the HTML to pandas.read_html() for parsing.
+
+    Searches all tables on each page for one that looks like a constituents
+    list — i.e. has a ticker-like column and a sector-like column with
+    enough rows to be a real index listing. This makes it robust to Wikipedia
+    restructuring the page layout.
+
+    Returns a dict of {"TICKER.L": "Sector"} on success, or None on failure.
+    """
+    import requests
+    from io import StringIO
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+
+    tickers = {}
+
+    for url in [
+        "https://en.wikipedia.org/wiki/FTSE_100_Index",
+        "https://en.wikipedia.org/wiki/FTSE_250_Index",
+    ]:
+        try:
+            response = requests.get(url, headers=headers, timeout=15)
+            response.raise_for_status()
+
+            # Fetch ALL tables on the page — no class filter — so we don't
+            # miss the constituents table if Wikipedia changes its CSS classes
+            all_tables = pd.read_html(StringIO(response.text))
+
+            for table in all_tables:
+                cols     = [str(c).lower() for c in table.columns]
+                col_list = list(table.columns)
+
+                # Find ticker column — check header names first, then row content
+                ticker_col = next(
+                    (col_list[i] for i, c in enumerate(cols)
+                     if any(k in c for k in ["ticker", "symbol", "epic"])),
+                    None
+                )
+                sector_col = next(
+                    (col_list[i] for i, c in enumerate(cols)
+                     if any(k in c for k in ["sector", "industry", "icb", "benchmark"])),
+                    None
+                )
+
+                # If headers aren't named, check whether any column's values
+                # look like LSE tickers (2-4 uppercase letters)
+                if ticker_col is None:
+                    for col in col_list:
+                        sample = table[col].dropna().astype(str).head(20)
+                        matches = sample.str.match(r"^[A-Z0-9]{2,5}$").sum()
+                        if matches >= 10:
+                            ticker_col = col
+                            break
+
+                if ticker_col is None or sector_col is None:
+                    continue
+
+                # Must have at least 50 rows to be a real index constituent table
+                if len(table) < 50:
+                    continue
+
+                for _, row in table.iterrows():
+                    raw_ticker = str(row[ticker_col]).strip()
+                    raw_sector = str(row[sector_col]).strip()
+
+                    if not raw_ticker or raw_ticker.lower() in ("nan", "ticker", "symbol"):
+                        continue
+
+                    # Skip obviously non-ticker values
+                    if len(raw_ticker) > 6 or " " in raw_ticker:
+                        continue
+
+                    if not raw_ticker.endswith(".L"):
+                        raw_ticker = raw_ticker + ".L"
+
+                    tickers[raw_ticker] = SECTOR_MAP.get(raw_sector, "Other")
+
+                if len(tickers) >= 50:
+                    break  # Found a valid table for this index, move to next URL
+
+        except Exception:
+            pass
+
+    return tickers if len(tickers) >= 50 else None
+
+
+def get_tickers() -> dict:
+    """
+    Returns the ticker universe for this run, using the following priority:
+
+      1. Fetch fresh list from Wikipedia
+           → If successful: save to JSON, use fresh list
+      2. Load from JSON cache (last successful Wikipedia fetch)
+           → If available: use cached list, note the date it was last updated
+      3. Emergency bootstrap (hardcoded ~20 stocks)
+           → Only reached on the very first run with no internet and no JSON file
+           → After the first successful fetch this is never used again
+
+    Result is cached in-process so Wikipedia is only called once per run.
+    """
+    if hasattr(get_tickers, "_cache"):
+        return get_tickers._cache
+
+    # ── 1. Try Wikipedia ──────────────────────────────────────────────────────
+    fresh = fetch_from_wikipedia()
+    if fresh:
+        save_json_tickers(fresh)
+        get_tickers._source = f"Wikipedia (live, {len(fresh)} stocks)"
+        get_tickers._cache  = fresh
+        return fresh
+
+    # ── 2. Try JSON cache ─────────────────────────────────────────────────────
+    cached = load_json_tickers()
+    if cached:
+        # Read the last_updated date to show the user
+        try:
+            with open(TICKERS_JSON, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            last_updated = meta.get("last_updated", "unknown date")
+        except Exception:
+            last_updated = "unknown date"
+
+        get_tickers._source = (
+            f"JSON cache — last updated {last_updated} "
+            f"({len(cached)} stocks)  [Wikipedia unavailable]"
+        )
+        get_tickers._cache = cached
+        return cached
+
+    # ── 3. Emergency bootstrap ────────────────────────────────────────────────
+    get_tickers._source = (
+        f"emergency bootstrap ({len(EMERGENCY_BOOTSTRAP)} stocks)  "
+        "[no internet, no cache file — results will be limited]"
+    )
+    get_tickers._cache = EMERGENCY_BOOTSTRAP
+    return EMERGENCY_BOOTSTRAP
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PARAMETERS  — these are tuned automatically by the calibration engine
@@ -886,8 +1076,8 @@ def main():
     mode_label = "[green]LIVE[/green]" if live_mode else "[yellow]PREVIEW[/yellow]"
 
     console.print(Panel(
-        f"[bold cyan]LSE Stock Screener  v3.1[/bold cyan]\n"
-        f"[dim]Run at {run_date}  •  Screening {len(TICKERS)} tickers[/dim]  •  "
+        f"[bold cyan]LSE Stock Screener  v4.0[/bold cyan]\n"
+        f"[dim]Run at {run_date}[/dim]  •  "
         f"Mode: {mode_label}\n\n"
         "[dim]Features:  Volume ✔   Sectors ✔   Events ✔   "
         "Auto-outcomes ✔   Self-calibration ✔[/dim]",
@@ -904,13 +1094,20 @@ def main():
     cal = compute_calibration()
     print_performance_report(cal)
 
-    # ── Step 3: screen tickers, applying calibration correction to probs ─────
+    # ── Step 3: fetch constituent list, then screen tickers ─────────────────
+    with console.status("[bold green]Fetching FTSE constituent list…"):
+        tickers = get_tickers()
+
+    source = getattr(get_tickers, "_source", f"{len(tickers)} stocks")
+    source_colour = "green" if "live" in source else "yellow" if "cache" in source else "red"
+    console.print(f"[dim]📋 Ticker universe: [{source_colour}]{source}[/{source_colour}][/dim]\n")
+
     all_results    = []
     skipped_events = []
 
     with console.status("[bold green]Fetching data & scoring tickers…") as status:
-        for i, (ticker, sector) in enumerate(TICKERS.items()):
-            status.update(f"[bold green]Analysing {ticker} ({i+1}/{len(TICKERS)})…")
+        for i, (ticker, sector) in enumerate(tickers.items()):
+            status.update(f"[bold green]Analysing {ticker} ({i+1}/{len(tickers)})…")
 
             has_event, event_reason = has_event_in_window(ticker)
             if has_event:
