@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-02-27 17:17",
+  "last_updated": "2026-03-03 11:25",
   "source": "Wikipedia",
   "count": 350,
   "tickers": {
@@ -9,7 +9,6 @@
     "ALW.L": "FinServices",
     "AAL.L": "Other",
     "ANTO.L": "Other",
-    "AHT.L": "Other",
     "ABF.L": "Other",
     "AZN.L": "Other",
     "AUTO.L": "Media",
@@ -98,6 +97,7 @@
     "STAN.L": "Banking",
     "STJ.L": "Other",
     "TSCO.L": "Other",
+    "BBOX.L": "Other",
     "ULVR.L": "Other",
     "UU.L": "Other",
     "VOD.L": "Other",
@@ -155,6 +155,7 @@
     "CMCX.L": "FinServices",
     "COA.L": "Other",
     "CCC.L": "Other",
+    "COST.L": "Other",
     "CWK.L": "Other",
     "CURY.L": "Other",
     "DLN.L": "Other",
@@ -330,7 +331,6 @@
     "TCAP.L": "Other",
     "TRN.L": "Other",
     "TPK.L": "Other",
-    "BBOX.L": "Other",
     "TRY.L": "FinServices",
     "TRST.L": "Tech",
     "TFIF.L": "FinServices",
