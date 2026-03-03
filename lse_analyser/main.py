@@ -49,7 +49,7 @@ def main():
     mode_label = "[green]LIVE[/green]" if live_mode else "[yellow]PREVIEW[/yellow]"
 
     console.print(Panel(
-        f"[bold cyan]LSE Stock Screener  v4.0[/bold cyan]\n"
+        f"[bold cyan]LSE Stock Screener  v5.0[/bold cyan]\n"
         f"[dim]Run at {run_date}[/dim]  --  Mode: {mode_label}\n\n"
         "[dim]Features:  Volume filter  |  Sector diversification  |  "
         "Event filter  |  Auto-outcomes  |  Self-calibration[/dim]",
@@ -71,7 +71,7 @@ def main():
         tickers = get_tickers()
 
     source        = getattr(get_tickers, "_source", f"{len(tickers)} stocks")
-    source_colour = "green" if "live" in source else "yellow" if "cache" in source else "red"
+    source_colour = getattr(get_tickers, "_source_colour", "yellow")
     console.print(f"[dim]Ticker universe: [{source_colour}]{source}[/{source_colour}][/dim]\n")
 
     # Step 4: screen all tickers
