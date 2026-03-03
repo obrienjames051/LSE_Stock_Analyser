@@ -30,29 +30,64 @@ CSV_HEADERS = [
     "outcome_notes",
 ]
 
-SECTOR_MAP = {
-    "Automobiles & Parts":                  "ConsDis",
-    "Banks":                                "Banking",
-    "Basic Resources":                      "Mining",
-    "Chemicals":                            "Chemicals",
-    "Construction & Materials":             "Materials",
-    "Consumer Products & Services":         "ConsDis",
-    "Energy":                               "Energy",
-    "Financial Services":                   "FinServices",
-    "Food, Beverage & Tobacco":             "ConsStaples",
-    "Health Care":                          "Pharma",
-    "Industrial Goods & Services":          "Industrials",
-    "Insurance":                            "Insurance",
-    "Investment Trusts":                    "FinServices",
-    "Media":                                "Media",
-    "Personal Care, Drug & Grocery Stores": "Retail",
-    "Real Estate":                          "RealEstate",
-    "Retail":                               "Retail",
-    "Technology":                           "Tech",
-    "Telecommunications":                   "Telecoms",
-    "Travel & Leisure":                     "Leisure",
-    "Utilities":                            "Utilities",
-}
+# ---------------------------------------------------------------------------
+# SECTOR NORMALISATION
+# ---------------------------------------------------------------------------
+# Wikipedia uses inconsistent naming across FTSE 100 and FTSE 250 pages —
+# different capitalisation, "and" vs "&", old vs new ICB names, and highly
+# specific subcategory names. Rather than maintaining an exhaustive exact-
+# match dictionary, we use keyword-based fuzzy matching: the raw sector
+# string is lowercased and checked for the presence of each keyword list.
+# Rules are evaluated in order; the first match wins.
+# ---------------------------------------------------------------------------
+SECTOR_KEYWORDS = [
+    # (short label,  keywords that must appear in the lowercased sector string)
+    ("Banking",      ["bank"]),
+    ("Insurance",    ["insurance"]),
+    ("FinServices",  ["financial service", "investment trust", "collective invest",
+                      "equity invest", "general financial", "investment banking",
+                      "hedge fund"]),
+    ("Pharma",       ["pharma", "biotechnology", "health care", "health care equip",
+                      "medical"]),
+    ("Energy",       ["oil", "gas", "energy", "coal", "alternative energy",
+                      "electrical util", "electricity"]),
+    ("Mining",       ["mining", "metal", "precious metal", "basic resource"]),
+    ("Chemicals",    ["chemical"]),
+    ("Materials",    ["construction & material", "construction and material",
+                      "engineering and construction", "homebuilding",
+                      "home construction", "household good", "container",
+                      "packaging", "construction"]),
+    ("Industrials",  ["aerospace", "defence", "defense", "industrial engineer",
+                      "general industrial", "industrial good", "industrial support",
+                      "industrial transport", "support service", "electronic",
+                      "industrial metal", "industrials"]),
+    ("Tech",         ["software", "computer service", "technology",
+                      "consumer digital", "electronic equip"]),
+    ("ConsStaples",  ["beverage", "food", "tobacco", "personal good",
+                      "personal product", "consumer staple", "household",
+                      "food and drink"]),
+    ("Retail",       ["retail", "general retailer", "drug retail"]),
+    ("ConsDis",      ["automobile", "leisure good", "personal good"]),
+    ("Telecoms",     ["telecom", "mobile telecom"]),
+    ("Media",        ["media"]),
+    ("Leisure",      ["travel", "leisure", "hospitality"]),
+    ("RealEstate",   ["real estate", "reit", "real estate invest"]),
+    ("Utilities",    ["util", "water", "multiutil", "gas, water"]),
+]
+
+
+def normalise_sector(raw: str) -> str:
+    """
+    Map a raw Wikipedia sector string to a short internal label.
+    Uses keyword matching so minor naming variations are handled gracefully.
+    Returns "Other" if no rule matches.
+    """
+    lowered = raw.lower().strip()
+    for label, keywords in SECTOR_KEYWORDS:
+        if any(kw in lowered for kw in keywords):
+            return label
+    return "Other"
+
 
 EMERGENCY_BOOTSTRAP = {
     "AZN.L":  "Pharma",      "SHEL.L": "Energy",      "HSBA.L": "Banking",

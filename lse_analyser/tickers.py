@@ -26,7 +26,7 @@ from datetime import datetime
 import pandas as pd
 import requests
 
-from .config import TICKERS_JSON, SECTOR_MAP, EMERGENCY_BOOTSTRAP
+from .config import TICKERS_JSON, EMERGENCY_BOOTSTRAP, normalise_sector
 from .utils import console
 
 FTSE_URLS = {
@@ -101,7 +101,7 @@ def _fetch_index_from_wikipedia(url: str) -> dict | None:
                     continue
                 if not raw_ticker.endswith(".L"):
                     raw_ticker = raw_ticker + ".L"
-                tickers[raw_ticker] = SECTOR_MAP.get(raw_sector, "Other")
+                tickers[raw_ticker] = normalise_sector(raw_sector)
 
             if len(tickers) >= 50:
                 return tickers
