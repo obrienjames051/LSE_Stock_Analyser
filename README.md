@@ -1,6 +1,6 @@
-# LSE Stock Analyser v5.1
+# LSE Stock Analyser v6.0
 
-A Python tool that screens London Stock Exchange stocks using technical analysis and news sentiment to identify the five most likely to rise over the next seven calendar days. For each pick it suggests a target price, stop-loss, take-profit limit, and a position size based on your available capital.
+A Python tool that screens London Stock Exchange stocks using technical analysis, company news sentiment, and macro/sector intelligence to identify the five most likely to rise over the next seven calendar days. For each pick it suggests a target price, stop-loss, take-profit limit, and a position size based on your available capital.
 
 > **Disclaimer:** This is a quantitative screening tool only. All outputs are model estimates and do not constitute financial advice. Past technical patterns do not guarantee future results. Always apply your own judgement, and consider consulting a regulated financial adviser before trading.
 
@@ -66,7 +66,8 @@ LSE_Stock_Analyser/
     ├── config.py            ← all tunable parameters
     ├── tickers.py           ← FTSE constituent list management
     ├── screener.py          ← data fetching, filters, technical scoring
-    ├── news.py              ← NewsAPI fetching and VADER sentiment analysis
+    ├── news.py              ← company-level NewsAPI and VADER sentiment
+    ├── macro.py             ← macro/sector sentiment and event classification
     ├── calibration.py       ← outcome back-filling and self-calibration
     ├── sizing.py            ← Kelly position sizing
     ├── csv_log.py           ← CSV saving
@@ -86,7 +87,9 @@ Each time you run the script it will automatically:
 1. Resolve any picks from seven or more days ago by fetching their actual outcome prices
 2. Update the CSV log with those outcomes
 3. Use the accumulated history to self-calibrate its probability estimates
-4. Screen all ~350 FTSE tickers technically, then run news sentiment on the top candidates
+4. Fetch macro and sector sentiment before screening begins
+5. Screen all ~350 FTSE tickers technically, then run company news on the top candidates
+6. Apply sector sensitivity adjustments based on the detected macro event type
 
 After roughly four to six weeks (ten or more resolved picks) the self-calibration will start meaningfully adjusting the model's outputs based on its real track record.
 
@@ -100,7 +103,7 @@ After running the script on Sunday evening, check each pick on Monday morning af
 
 As a general guide, a gap of more than ±1% warrants reassessment of the R:R before entering. A gap beyond the stop price is an automatic skip.
 
-**If a major unexpected macro event occurs between your Sunday run and Monday morning** (geopolitical shock, surprise interest rate decision, etc.), consider skipping the week entirely. The model's signals were calculated before the event and may no longer reflect market reality.
+**From v6.0 onwards the script will warn you directly** if macro conditions suggest elevated risk — see the Macro Warning section below.
 
 ### Selling
 
@@ -122,6 +125,17 @@ This panel only appears once you have resolved picks in the log. On your first f
 
 ---
 
+### Macro Warning Panel
+
+After fetching market-wide headlines, the script checks the overall sentiment score against two thresholds:
+
+- **Caution (score below -0.4)** — a yellow warning panel is shown. The detected event type is named (e.g. "Geopolitical event detected"), sector sensitivities have been applied to the picks, and you are advised to review each pick's sector response before entering.
+- **Skip recommendation (score below -0.6)** — a red warning panel is shown. The script still produces picks for reference, but explicitly recommends considering sitting out the week due to elevated market-wide risk.
+
+If no warning threshold is breached the panel is not shown and the run proceeds normally.
+
+---
+
 ### Main Results Table
 
 | Column | What it means |
@@ -131,12 +145,13 @@ This panel only appears once you have resolved picks in the log. On your first f
 | **Price (p)** | Last closing price, in **pence**. Divide by 100 for £ (e.g. 2340p = £23.40) |
 | **Target (p)** | The price the model expects the stock could reach within seven days, in pence |
 | **Upside** | The percentage gain if the stock reaches its target price |
-| **Prob.** | The model's estimated probability that the target will be reached, after calibration adjustment. Colour-coded: green ≥ 60%, yellow ≥ 45%, red below 45% |
+| **Prob.** | The model's estimated probability that the target will be reached, after calibration, macro, and sector adjustments. Colour-coded: green ≥ 60%, yellow ≥ 45%, red below 45% |
 | **Stop (p)** | The stop-loss price to include on your buy order. If the stock falls to this level, your broker will automatically sell, limiting your loss |
 | **Limit (p)** | The take-profit limit to set after buying. Your broker will automatically sell when the stock reaches this price, locking in the gain without you having to monitor it |
 | **R:R** | Reward:Risk ratio — how much you stand to gain relative to how much you risk. An R:R of 2.0 means for every £1 you risk losing (to the stop-loss), you stand to make £2 if the target is hit. **Aim for ≥ 1.5.** Below 1.0 means you are risking more than you could gain |
-| **Score** | The model's internal signal quality score, combining technical indicators and news sentiment adjustment. The technical maximum is approximately **110**; news can add or subtract up to **15** further points |
-| **News** | The overall sentiment of recent headlines for this stock: Very positive, Positive, Neutral, Negative, or Very negative. Shown as -- if no news data was available |
+| **Score** | The model's internal signal quality score, combining technical indicators and company news sentiment adjustment. The technical maximum is approximately **110**; news can add or subtract up to **15** further points |
+| **Co. News** | Sentiment of company-specific headlines: Very positive, Positive, Neutral, Negative, or Very negative |
+| **Sector News** | Sentiment of sector-wide headlines for this pick's sector |
 
 ---
 
@@ -146,8 +161,9 @@ Printed below the main table, this lists the specific technical indicators that 
 
 - The ATR value (a measure of recent volatility used to set the target and stop distances)
 - The stop distance as a percentage below your entry price
-- The news sentiment score and article count
-- The actual headlines that were used to calculate the sentiment score
+- The company news sentiment score and article count
+- The actual company headlines used to calculate the sentiment score
+- The macro event type detected and how this stock's sector responds to it (e.g. "strong beneficiary", "mild headwind")
 
 ---
 
@@ -163,13 +179,24 @@ Printed below the main table, this lists the specific technical indicators that 
 | **Note** | Signal quality and any relevant flags — see below |
 
 **Note field values:**
-- `★ Strong signal — favoured` — probability ≥ 60%, Kelly sizing has weighted it heavily
+- `Strong signal — favoured` — probability ≥ 60%, Kelly sizing has weighted it heavily
 - `Moderate signal` — probability between 50–59%
 - `Weak signal — small stake only` — probability below 50% but above the minimum threshold
-- `★ Strong signal — favoured  ·  fractional share` — the pick is good but the suggested investment is less than one whole share
+- `Strong signal — favoured  ·  fractional share` — the pick is good but the suggested investment is less than one whole share
 - `⚠ Below confidence threshold — skip` — the probability is too low for the model to recommend any capital
 
 **Capital summary line:** Shows your total entered capital, the suggested amount to deploy across all picks, and how much to keep in reserve.
+
+---
+
+### Macro & Sector News Table
+
+Printed after the signal breakdown, this table summarises the macro and sector context for the week:
+
+- **Market-wide row** — the overall market sentiment score, the detected event type, and up to three of the most relevant headlines
+- **One row per sector** represented in the final five picks — sector sentiment label and key headlines for that sector
+
+This table only shows the sectors that appear in the final picks, not all sectors. If the top five picks span Tech, Energy, Banking, Pharma, and Mining, only those five sectors are shown alongside the market-wide row.
 
 ---
 
@@ -178,7 +205,7 @@ Printed below the main table, this lists the specific technical indicators that 
 The first thing the script asks on every run is which mode to use:
 
 - **Live mode (L)** — the full run. Outcome back-filling and CSV saving are both active. Use this for your weekly run.
-- **Preview mode (P)** — everything runs as normal (screening, news sentiment, calibration report, tables, position sizing) but nothing is written to the CSV. Use this if you want to check the current picks mid-week without it counting as your weekly log entry.
+- **Preview mode (P)** — everything runs as normal (screening, news sentiment, macro analysis, calibration report, tables, position sizing) but nothing is written to the CSV. Use this if you want to check the current picks mid-week without it counting as your weekly log entry.
 - **History mode (H)** — skips the screener entirely and lets you browse past runs. You will be shown a numbered list of all previous Live runs with their hit rates, and can select any one to see the full predictions table alongside the actual outcomes.
 
 Keeping Live and Preview separate ensures the calibration data stays clean — one set of picks per week, each with a full seven days to resolve before the next run is logged.
@@ -200,9 +227,9 @@ Occasionally Yahoo Finance will report that a ticker is not found — this is no
 
 ---
 
-## How news sentiment works
+## How company news sentiment works
 
-After the technical screening pass, the top 20 candidates by score are passed to the news analysis module:
+After the technical screening pass, the top 20 candidates by score are passed to the company news module:
 
 1. **Headlines are fetched** from NewsAPI for each candidate using the company name as a search query
 2. **Each headline is scored** individually using VADER sentiment analysis (-1.0 to +1.0)
@@ -210,9 +237,38 @@ After the technical screening pass, the top 20 candidates by score are passed to
 4. **Volume has a mild amplifying effect** — more articles nudge the score slightly further in the same direction, but a single extreme headline (e.g. a major profit warning) still carries meaningful weight on its own
 5. **The final score adjusts the pick's technical score** by up to ±15 points and its probability by up to ±10 percentage points
 
-**Expanding fallback:** If fewer than 5 of the top 20 candidates have neutral or better news sentiment, the screener automatically checks the next 10 candidates (positions 21–30), then the next 10 after that, and so on, until 5 viable picks are found or the list is exhausted.
+**Surgical replacement:** If a pick has negative company news sentiment, the screener tries to replace just that pick with the next best candidate. Picks with good sentiment are kept. If replacement candidates also have bad news, the screener expands the pool in batches of 10 until a viable replacement is found or the list is exhausted.
 
 If NewsAPI is unavailable, tickers pass through unchanged — a NewsAPI outage never prevents the screener from producing results.
+
+---
+
+## How macro and sector sentiment works
+
+Before any stock screening begins, the script fetches market-wide headlines and classifies the dominant macro event type:
+
+| Event type | Detected when headlines contain |
+|---|---|
+| **Geopolitical** | war, conflict, attack, military, sanctions, invasion, missile... |
+| **Recession** | recession, GDP, contraction, slowdown, unemployment, layoffs... |
+| **Inflation** | inflation, CPI, rate rise, interest rate, rate hike, hawkish... |
+| **Currency** | pound, sterling, GBP, exchange rate, weak pound, strong dollar... |
+| **General** | fallback if no specific event type is detected |
+
+Each sector has a defined sensitivity to each event type, reflecting how that sector actually responds in practice:
+
+- During a **geopolitical event** (e.g. a war in the Middle East), Energy and Mining picks are boosted (oil price spike, gold safe haven), while Tech and Leisure are penalised
+- During a **recession**, defensives like ConsStaples and Utilities hold up or benefit from rotation, while cyclicals like ConsDis and Leisure are penalised
+- During an **inflation/rate rise** event, Energy and Mining benefit as commodity hedges, while RealEstate and Tech are penalised by higher rates
+- During **currency weakness** (GBP falling), exporters and dollar-earning multinationals benefit, while importers and domestic-focused companies face headwinds
+
+This means macro sentiment never applies a flat dampener to all picks equally. A geopolitical event might simultaneously boost an Energy pick's probability while reducing a Tech pick's probability, which better reflects how markets actually move.
+
+**Sector sentiment** adds a further layer — for each sector represented in the shortlist, a sector-specific news search is run. If a sector has very negative news, the screener tries to replace that pick with the next best candidate from a different sector. If no better alternative exists, the best available pick is kept regardless, and the negative sector sentiment is noted in the output.
+
+**Warning thresholds:**
+- Score below **-0.4**: yellow caution panel shown, picks produced with sensitivity-adjusted probabilities
+- Score below **-0.6**: red skip recommendation shown, picks still produced for reference
 
 ---
 
@@ -246,18 +302,24 @@ These are in `lse_analyser/config.py` and can be adjusted if needed:
 | `CALIBRATION_WINDOW` | 50 | Number of most recent resolved picks used for calibration |
 | `MAX_CALIBRATION_SHIFT` | 15.0 | Maximum probability adjustment (pp) the calibration can apply in either direction |
 | `NEWS_LOOKBACK_DAYS` | 7 | How many days of news articles to fetch per candidate |
-| `NEWS_MAX_SCORE_ADJ` | 15 | Maximum points added or subtracted from the technical score by news sentiment |
-| `NEWS_CANDIDATE_COUNT` | 20 | Number of top technical candidates to run news analysis on |
-| `NEWS_FALLBACK_BATCH` | 10 | Number of additional candidates to check if fewer than 5 pass sentiment |
+| `NEWS_MAX_SCORE_ADJ` | 15 | Maximum points added or subtracted from the technical score by company news |
+| `NEWS_CANDIDATE_COUNT` | 20 | Number of top technical candidates to run company news analysis on |
+| `NEWS_FALLBACK_BATCH` | 10 | Number of additional candidates to check if replacements are needed |
+| `MACRO_WARNING_THRESHOLD` | -0.4 | Macro score below which a caution panel is shown |
+| `MACRO_SKIP_THRESHOLD` | -0.6 | Macro score below which a skip recommendation is shown |
+| `MACRO_MAX_PROB_SHIFT` | 15.0 | Maximum probability adjustment (pp) from macro + sector sentiment combined |
+| `SECTOR_REPLACE_THRESHOLD` | -0.25 | Sector sentiment score below which a pick is flagged for replacement |
 
 ---
 
 ## Filters applied during screening
 
 - **Volume filter** — removes stocks whose average daily traded value is below £500,000. Low-volume stocks have less reliable price signals and wider bid/ask spreads.
-- **Sector diversification** — ensures the five picks span different sectors (energy, banking, pharma, etc.), so a single sector shock does not affect all positions simultaneously.
-- **Event filter** — removes any stock with an earnings announcement or ex-dividend date falling within the next seven days. These events can cause large price moves that have nothing to do with the technical setup, making the model's predictions unreliable for those stocks.
-- **News sentiment** — recent headlines are analysed for each top candidate. Strong negative sentiment reduces a stock's score and probability; strong positive sentiment increases them.
+- **Sector diversification** — ensures the five picks span different sectors where possible, so a single sector shock does not affect all positions simultaneously.
+- **Event filter** — removes any stock with an earnings announcement or ex-dividend date falling within the next seven days.
+- **Company news sentiment** — recent headlines are analysed per stock. Strong negative sentiment reduces score and probability; strong positive sentiment increases them.
+- **Sector sentiment** — sector-wide headlines are analysed. Picks with very negative sector sentiment are replaced if a better alternative exists.
+- **Macro sensitivity** — market-wide sentiment is classified by event type and applied to each sector according to how that sector historically responds to that type of event.
 
 ---
 
@@ -274,5 +336,5 @@ If you want to review your historical performance outside the script, you can op
 - **All prices in the tables are in pence, not pounds.** A price of 2340 means £23.40. The exception is the Position Sizing table, where the "Price (£)" and "Invest (£)" columns are already converted to pounds.
 - **Data comes from Yahoo Finance** and is typically delayed by around 15 minutes for LSE stocks. The script is designed for end-of-day use — run after 16:45 to ensure Friday closing prices are fully settled.
 - **The script screens approximately 350 FTSE 100/250 tickers**, fetched live from Wikipedia on each run.
-- **News sentiment uses the free tier of NewsAPI**, which allows 100 requests per day. Since the screener typically analyses 20–30 candidates per run, this limit is unlikely to be reached in normal weekly use.
-- **The probability figures are model estimates**, not guaranteed odds. They reflect the historical hit rate of similar technical setups, adjusted for the model's own track record and current news sentiment.
+- **News and macro sentiment use NewsAPI**, which provides up to 1,000 requests per day on the plan used. A typical run makes 26–36 requests (20 company searches, 1 market-wide search, up to 5 sector searches), well within the daily limit.
+- **The probability figures are model estimates**, not guaranteed odds. They reflect the historical hit rate of similar technical setups, adjusted for the model's own track record, current news sentiment, and macro/sector conditions.
