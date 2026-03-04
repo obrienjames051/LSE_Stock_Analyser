@@ -35,9 +35,26 @@ def print_results_table(top: list, cal: dict):
     table.add_column("Limit (p)",  justify="right",  style="bright_yellow")
     table.add_column("R:R",        justify="center", style="magenta")
     table.add_column("Score",      justify="center", style="dim magenta")
+    table.add_column("News",       justify="left",   style="dim white",   no_wrap=True)
 
     for i, r in enumerate(top, 1):
         pc = "bright_green" if r["prob"] >= 60 else "yellow" if r["prob"] >= 45 else "red"
+
+        news      = r.get("news", {})
+        news_score = news.get("score", None)
+        if not news.get("available"):
+            news_str = "[dim]--[/dim]"
+        elif news_score >= 0.35:
+            news_str = "[bright_green]Very positive[/bright_green]"
+        elif news_score >= 0.10:
+            news_str = "[green]Positive[/green]"
+        elif news_score >= -0.10:
+            news_str = "[dim]Neutral[/dim]"
+        elif news_score >= -0.35:
+            news_str = "[yellow]Negative[/yellow]"
+        else:
+            news_str = "[red]Very negative[/red]"
+
         table.add_row(
             str(i), r["ticker"], r["sector"],
             f"{r['price']:,.2f}", f"{r['target']:,.2f}",
@@ -45,6 +62,7 @@ def print_results_table(top: list, cal: dict):
             f"[{pc}]{r['prob']:.0f}%[/{pc}]",
             f"{r['stop']:,.2f}", f"{r['limit']:,.2f}",
             f"{r['reward_risk']:.2f}", str(r["score"]),
+            news_str,
         )
     console.print(table)
 
@@ -67,13 +85,13 @@ def print_sizing_table(top: list, total_capital: float):
         price_gbp = r["price"] / 100
 
         if r["allocated_gbp"] == 0:
-            note       = "⚠ Below confidence threshold -- skip"
+            note       = "Below confidence threshold -- skip"
             shares_str = "--"
             invest_str = "£0.00"
         else:
-            invest_str  = f"£{r['allocated_gbp']:,.2f}"
+            invest_str = f"£{r['allocated_gbp']:,.2f}"
             if r["prob"] >= 60:
-                signal_note = "★ Strong signal -- favoured"
+                signal_note = "Strong signal -- favoured"
             elif r["prob"] >= 50:
                 signal_note = "Moderate signal"
             else:
@@ -103,19 +121,31 @@ def print_sizing_table(top: list, total_capital: float):
 
 
 def print_signal_breakdown(top: list, skipped_events: list):
-    """Print the detailed per-stock signal breakdown."""
+    """Print the detailed per-stock signal breakdown including news headlines."""
     console.print("[bold]Detailed signal breakdown:[/bold]\n")
     for i, r in enumerate(top, 1):
         console.print(f"  [bold yellow]{i}. {r['ticker']}[/bold yellow]  [dim]({r['sector']})[/dim]")
+
         for sig in r["signals"]:
             console.print(f"     [dim]•[/dim] {sig}")
+
         console.print(
             f"     [dim]ATR(14) = {r['atr']:.2f}p  |  "
             f"Stop is {r['downside_pct']:.1f}% below entry  |  "
-            f"Reward:Risk = {r['reward_risk']:.2f}[/dim]\n"
+            f"Reward:Risk = {r['reward_risk']:.2f}[/dim]"
         )
+
+        # Show news headlines if available
+        news = r.get("news", {})
+        if news.get("available") and news.get("headlines"):
+            console.print(f"     [dim]Recent headlines:[/dim]")
+            for headline in news["headlines"]:
+                console.print(f"       [dim]-[/dim] [dim italic]{headline}[/dim italic]")
+
+        console.print()
+
     if skipped_events:
-        console.print(f"[dim]⏭  Skipped (event within 7 days): {', '.join(skipped_events)}[/dim]\n")
+        console.print(f"[dim]Skipped (event within 7 days): {', '.join(skipped_events)}[/dim]\n")
 
 
 def print_disclaimer():
@@ -127,15 +157,23 @@ def print_disclaimer():
         "  prices, and records whether the target was hit. Once 10+ outcomes exist,\n"
         "  it compares predicted probabilities against the real hit rate and adjusts\n"
         "  today's outputs accordingly.\n\n"
+        "[bold]How news sentiment works:[/bold]\n"
+        "  For the top 20 technical candidates, recent headlines are fetched from\n"
+        "  NewsAPI and scored using VADER sentiment analysis. Each headline is\n"
+        "  weighted by recency. Strong negative sentiment reduces the score and\n"
+        "  probability; strong positive sentiment increases them. If too many\n"
+        "  candidates have negative news, the screener automatically checks further\n"
+        "  down the ranked list until 5 viable picks are found.\n\n"
         "[bold]Column guide:[/bold]\n"
         "  Price / Target / Stop / Limit  All in PENCE (divide by 100 for £)\n"
         "  R:R        Reward:Risk ratio (aim >= 1.5)\n"
         "  Upside     % gain if target price is reached\n"
-        "  Score      Internal signal quality score out of ~110\n"
+        "  Score      Internal signal quality score (technical + news adjustment)\n"
+        "  News       Sentiment label from recent headlines\n"
         "  Invest (£) Suggested amount -- the primary sizing guide\n"
         "  ~Shares    Advisory share count (fractional shares supported)\n"
         "  Prob.      Calibration-adjusted probability estimate\n\n"
-        "[bold red]⚠ Disclaimer:[/bold red] Quantitative screening tool only -- NOT financial\n"
+        "[bold red]Disclaimer:[/bold red] Quantitative screening tool only -- NOT financial\n"
         "advice. All probabilities are model estimates. Past patterns do not\n"
         "guarantee future results. Consult a regulated adviser before trading.[/dim]",
         title="[bold]How It Works & Disclaimer[/bold]",

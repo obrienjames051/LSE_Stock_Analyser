@@ -98,3 +98,31 @@ EMERGENCY_BOOTSTRAP = {
     "PRU.L":  "Insurance",   "RR.L":   "Industrials",  "IAG.L":  "Leisure",
     "SSE.L":  "Utilities",   "REL.L":  "Tech",
 }
+
+# ---------------------------------------------------------------------------
+# NEWS SENTIMENT
+# ---------------------------------------------------------------------------
+# NEWSAPI_KEY is loaded from the .env file in the project root folder.
+# Never hardcode the key here — .env is listed in .gitignore.
+# ---------------------------------------------------------------------------
+import os as _os
+
+def _load_env():
+    """Load key=value pairs from .env file into environment if present."""
+    env_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), ".env")
+    if not _os.path.isfile(env_path):
+        return
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, value = line.partition("=")
+                _os.environ.setdefault(key.strip(), value.strip())
+
+_load_env()
+
+NEWSAPI_KEY            = _os.environ.get("NEWSAPI_KEY", "")
+NEWS_LOOKBACK_DAYS     = 7      # How many days of articles to fetch
+NEWS_MAX_SCORE_ADJ     = 15     # Max points added/subtracted from technical score
+NEWS_CANDIDATE_COUNT   = 20     # How many top candidates to run news analysis on
+NEWS_FALLBACK_BATCH    = 10     # How many extra candidates to check if <5 pass sentiment
