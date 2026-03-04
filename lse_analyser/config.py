@@ -126,3 +126,157 @@ NEWS_LOOKBACK_DAYS     = 7      # How many days of articles to fetch
 NEWS_MAX_SCORE_ADJ     = 15     # Max points added/subtracted from technical score
 NEWS_CANDIDATE_COUNT   = 20     # How many top candidates to run news analysis on
 NEWS_FALLBACK_BATCH    = 10     # How many extra candidates to check if <5 pass sentiment
+
+# ---------------------------------------------------------------------------
+# MACRO & SECTOR SENTIMENT
+# ---------------------------------------------------------------------------
+
+# Thresholds for market-wide sentiment warnings
+MACRO_WARNING_THRESHOLD = -0.4   # Show warning panel, reduce probabilities
+MACRO_SKIP_THRESHOLD    = -0.6   # Recommend skipping the week
+
+# How much macro sentiment can shift probabilities (pp) at maximum negative
+MACRO_MAX_PROB_SHIFT    = 15.0
+
+# Sector sentiment threshold below which a pick is flagged for replacement
+SECTOR_REPLACE_THRESHOLD = -0.25
+
+# NewsAPI search queries for market-wide and each sector
+MACRO_MARKET_QUERY = "FTSE stock market UK economy global markets"
+
+SECTOR_QUERIES = {
+    "Banking":      "UK banking sector banks",
+    "Insurance":    "UK insurance sector",
+    "FinServices":  "UK financial services sector",
+    "Pharma":       "UK pharmaceutical sector healthcare",
+    "Energy":       "UK energy sector oil gas",
+    "Mining":       "UK mining sector metals commodities",
+    "Chemicals":    "UK chemicals sector",
+    "Materials":    "UK construction materials sector",
+    "Industrials":  "UK industrials aerospace defence sector",
+    "Tech":         "UK technology sector",
+    "ConsStaples":  "UK consumer staples food beverage sector",
+    "Retail":       "UK retail sector",
+    "ConsDis":      "UK consumer discretionary sector",
+    "Telecoms":     "UK telecommunications sector",
+    "Media":        "UK media sector",
+    "Leisure":      "UK travel leisure hospitality sector",
+    "RealEstate":   "UK real estate property sector",
+    "Utilities":    "UK utilities water electricity sector",
+}
+
+# Event classification keywords
+EVENT_KEYWORDS = {
+    "geopolitical": [
+        "war", "conflict", "attack", "military", "sanctions", "invasion",
+        "missile", "airstrike", "troops", "nato", "terror", "geopolit",
+    ],
+    "recession": [
+        "recession", "gdp", "contraction", "slowdown", "unemployment",
+        "layoffs", "downturn", "depression", "shrink", "negative growth",
+    ],
+    "inflation": [
+        "inflation", "cpi", "rpi", "rate rise", "interest rate", "rate hike",
+        "hawkish", "price rise", "cost of living", "stagflation",
+    ],
+    "currency": [
+        "pound", "sterling", "gbp", "exchange rate", "currency", "dollar",
+        "forex", "devaluation", "weak pound", "strong dollar",
+    ],
+}
+
+# Sector sensitivity maps per event type.
+# Values: +1.0 = strong positive, 0.0 = neutral, -1.0 = strong negative.
+# These are multiplied by the macro sentiment score to get the sector adjustment.
+SECTOR_SENSITIVITY = {
+    "geopolitical": {
+        "Energy":      1.5,   # Oil price spike benefits producers
+        "Mining":      1.5,   # Gold/precious metals safe haven
+        "Utilities":   0.5,   # Defensive
+        "ConsStaples": 0.5,   # Defensive
+        "Pharma":      0.3,   # Slightly defensive
+        "Telecoms":    0.0,   # Neutral
+        "Media":       0.0,   # Neutral
+        "Chemicals":  -0.5,
+        "Materials":  -0.5,
+        "Industrials": -0.8,  # Defence subsector up but broad industrials down
+        "Banking":    -0.8,
+        "FinServices": -0.8,
+        "Tech":        -1.0,
+        "Leisure":     -1.0,  # Travel hit hard
+        "Retail":      -0.8,
+        "ConsDis":     -0.8,
+        "RealEstate":  -0.8,
+        "Insurance":   -0.5,
+    },
+    "recession": {
+        "ConsStaples": 0.8,   # Defensive rotation
+        "Utilities":   0.8,   # Defensive rotation
+        "Pharma":      0.5,   # Defensive
+        "Mining":      0.3,   # Gold holds up
+        "Telecoms":    0.2,   # Fairly defensive
+        "Media":       0.0,
+        "Insurance":  -0.2,
+        "Energy":     -0.3,   # Lower demand
+        "RealEstate":  -0.5,
+        "Banking":    -0.8,   # Credit risk rises
+        "FinServices": -0.8,
+        "Chemicals":  -0.8,
+        "Materials":  -0.8,
+        "Industrials": -0.8,
+        "Tech":        -0.8,
+        "Retail":      -0.8,
+        "ConsDis":     -1.0,
+        "Leisure":     -1.0,
+    },
+    "inflation": {
+        "Energy":      1.0,   # Higher commodity prices
+        "Mining":      1.0,   # Commodities hedge
+        "Materials":   0.5,
+        "ConsStaples": 0.3,   # Can pass on price rises
+        "Industrials": 0.0,
+        "Chemicals":   0.0,
+        "Insurance":   0.5,   # Investment returns improve
+        "Banking":     0.3,   # Net interest margin can improve
+        "Pharma":      0.0,
+        "Media":       0.0,
+        "Utilities":  -0.3,   # Cost pressures
+        "Leisure":    -0.5,   # Consumer spending squeezed
+        "Retail":     -0.5,
+        "ConsDis":    -0.5,
+        "Tech":        -0.8,  # Growth stocks devalued by rate rises
+        "RealEstate":  -1.0,  # Rate sensitive
+        "Telecoms":   -0.8,
+        "FinServices": -0.3,
+    },
+    "currency": {
+        # GBP weakness: exporters/multinationals benefit (most large FTSE cos)
+        "Energy":      0.8,   # Dollar-denominated revenues
+        "Mining":      0.8,   # Dollar-denominated revenues
+        "Pharma":      0.5,   # Global revenues
+        "Tech":        0.5,   # Global revenues
+        "ConsStaples": 0.3,   # Some global exposure
+        "Industrials": 0.3,
+        "Telecoms":    0.0,   # Mostly domestic
+        "Media":       0.0,
+        "Utilities":  -0.3,   # Domestic, import costs rise
+        "Materials":  -0.3,
+        "Chemicals":  -0.3,
+        "Banking":    -0.2,
+        "FinServices": 0.2,   # Mixed
+        "Insurance":   0.0,
+        "Retail":     -0.5,   # Import costs rise
+        "ConsDis":    -0.3,
+        "Leisure":     0.2,   # Inbound tourism benefits
+        "RealEstate":  -0.2,
+    },
+}
+
+# Fallback sensitivity used when no specific event type is detected
+SECTOR_SENSITIVITY["general"] = {
+    "ConsStaples": 0.5, "Utilities": 0.5, "Pharma": 0.3, "Mining": 0.3,
+    "Telecoms": 0.1, "Media": 0.0, "Insurance": 0.0, "Energy": 0.0,
+    "Banking": -0.3, "FinServices": -0.3, "Tech": -0.5, "Industrials": -0.3,
+    "Chemicals": -0.3, "Materials": -0.3, "Retail": -0.4, "ConsDis": -0.5,
+    "Leisure": -0.5, "RealEstate": -0.4,
+}
