@@ -2,6 +2,14 @@
 calibration.py
 --------------
 Automatic outcome back-filling and self-calibration engine.
+
+Reads from three sources with different weights:
+  - lse_screener_log.csv       (live picks, weight 1.0)
+  - lse_backtest_technical.csv (technical backtest, weight 0.6)
+  - lse_backtest_news.csv      (news backtest, weight 0.3)
+
+Once CALIBRATION_LIVE_THRESHOLD live picks are resolved, backtest data
+is phased out and only live picks are used for calibration.
 """
 
 import os
@@ -15,14 +23,17 @@ from rich import box
 from .config import (
     CSV_FILE, CSV_HEADERS,
     MIN_OUTCOMES_TO_CALIBRATE, CALIBRATION_WINDOW, MAX_CALIBRATION_SHIFT,
+    BACKTEST_TECHNICAL_CSV, BACKTEST_NEWS_CSV,
+    CALIBRATION_WEIGHT_LIVE, CALIBRATION_WEIGHT_TECHNICAL, CALIBRATION_WEIGHT_NEWS,
+    CALIBRATION_LIVE_THRESHOLD,
 )
 from .utils import console, silent
 
 
 def resolve_pending_outcomes() -> int:
     """
-    Find picks from 7+ days ago with no outcome recorded, fetch their
-    actual closing prices from Yahoo Finance, and fill in the CSV.
+    Find live picks from 7+ days ago with no outcome recorded, fetch their
+    actual closing prices, and fill in the CSV.
     Returns the number of rows updated.
     """
     if not os.path.isfile(CSV_FILE):
@@ -65,7 +76,10 @@ def resolve_pending_outcomes() -> int:
                     row["outcome_notes"] = "Could not fetch outcome data"
                     continue
 
-                df.columns = [c[0].lower() if isinstance(c, tuple) else c.lower() for c in df.columns]
+                df.columns = [
+                    c[0].lower() if isinstance(c, tuple) else c.lower()
+                    for c in df.columns
+                ]
                 outcome_price = float(df["close"].iloc[-1])
                 entry_price   = float(row["price_p"])
                 target_price  = float(row["target_p"])
@@ -105,86 +119,181 @@ def resolve_pending_outcomes() -> int:
 
 def compute_calibration() -> dict:
     """
-    Read historical outcomes and compute probability adjustment.
+    Read historical outcomes from all three sources and compute a
+    weighted probability adjustment.
+
     Returns a calibration dict with adjustment value and status message.
     """
     neutral = {
         "n_resolved": 0, "actual_hit_rate": None, "avg_predicted_prob": None,
         "calibration_bias": 0.0, "prob_adjustment": 0.0, "avg_return_pct": None,
-        "calibrated": False,
+        "calibrated": False, "live_count": 0, "backtest_used": False,
         "status": f"Not yet calibrated (need {MIN_OUTCOMES_TO_CALIBRATE} resolved picks)",
     }
-    if not os.path.isfile(CSV_FILE):
+
+    # Load live picks
+    live_rows = _load_resolved(CSV_FILE)
+    live_count = len(live_rows)
+
+    # Decide whether to include backtest data
+    use_backtest = live_count < CALIBRATION_LIVE_THRESHOLD
+
+    # Build weighted pool
+    weighted_pool = []
+
+    for row in live_rows[-CALIBRATION_WINDOW:]:
+        weighted_pool.append((row, CALIBRATION_WEIGHT_LIVE))
+
+    if use_backtest:
+        tech_rows = _load_resolved(BACKTEST_TECHNICAL_CSV)
+        for row in tech_rows[-CALIBRATION_WINDOW:]:
+            weighted_pool.append((row, CALIBRATION_WEIGHT_TECHNICAL))
+
+        news_rows = _load_resolved(BACKTEST_NEWS_CSV)
+        for row in news_rows[-CALIBRATION_WINDOW:]:
+            weighted_pool.append((row, CALIBRATION_WEIGHT_NEWS))
+
+    if not weighted_pool:
+        neutral["status"] = (
+            f"Not yet calibrated -- no resolved picks found. "
+            f"Run backtest mode (B) to bootstrap calibration."
+        )
         return neutral
 
-    resolved = []
-    with open(CSV_FILE, "r", newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            if row.get("outcome_hit", "").strip() in ("YES", "NO"):
-                resolved.append(row)
+    # Compute weighted hit rate and predicted prob
+    total_weight     = sum(w for _, w in weighted_pool)
+    weighted_hits    = sum(
+        w for row, w in weighted_pool if row.get("outcome_hit") == "YES"
+    )
+    weighted_probs   = []
+    weighted_returns = []
 
-    if len(resolved) < MIN_OUTCOMES_TO_CALIBRATE:
-        neutral["n_resolved"] = len(resolved)
-        neutral["status"] = (f"Not yet calibrated -- {len(resolved)} resolved so far, "
-                             f"need {MIN_OUTCOMES_TO_CALIBRATE}")
+    for row, w in weighted_pool:
+        try:
+            weighted_probs.append((float(row["prob"]), w))
+        except (ValueError, KeyError):
+            pass
+        try:
+            weighted_returns.append((float(row["outcome_return_pct"]), w))
+        except (ValueError, KeyError):
+            pass
+
+    n_resolved      = len(weighted_pool)
+    actual_hit_rate = (weighted_hits / total_weight) * 100
+    avg_predicted   = (
+        sum(p * w for p, w in weighted_probs) / sum(w for _, w in weighted_probs)
+        if weighted_probs else 50.0
+    )
+    avg_return = (
+        sum(r * w for r, w in weighted_returns) / sum(w for _, w in weighted_returns)
+        if weighted_returns else 0.0
+    )
+
+    if n_resolved < MIN_OUTCOMES_TO_CALIBRATE:
+        neutral["n_resolved"] = n_resolved
+        neutral["live_count"] = live_count
+        neutral["status"]     = (
+            f"Not yet calibrated -- {n_resolved} weighted picks so far, "
+            f"need {MIN_OUTCOMES_TO_CALIBRATE}"
+        )
         return neutral
 
-    resolved        = resolved[-CALIBRATION_WINDOW:]
-    hits            = [r for r in resolved if r["outcome_hit"] == "YES"]
-    actual_hit_rate = len(hits) / len(resolved) * 100
-    predicted_probs, returns = [], []
-
-    for r in resolved:
-        try: predicted_probs.append(float(r["prob"]))
-        except (ValueError, KeyError): pass
-        try: returns.append(float(r["outcome_return_pct"]))
-        except (ValueError, KeyError): pass
-
-    avg_predicted = sum(predicted_probs) / len(predicted_probs) if predicted_probs else 50.0
-    avg_return    = sum(returns) / len(returns) if returns else 0.0
-    bias          = avg_predicted - actual_hit_rate
-    adjustment    = max(-MAX_CALIBRATION_SHIFT, min(MAX_CALIBRATION_SHIFT, bias))
+    bias       = avg_predicted - actual_hit_rate
+    adjustment = max(-MAX_CALIBRATION_SHIFT, min(MAX_CALIBRATION_SHIFT, bias))
 
     if abs(bias) < 3.0:
-        status = f"Well-calibrated (bias: {bias:+.1f}pp across {len(resolved)} picks)"
+        status = f"Well-calibrated (bias: {bias:+.1f}pp)"
     elif bias > 0:
-        status = (f"Over-confident by {bias:.1f}pp -- reducing probabilities by "
-                  f"{adjustment:.1f}pp to compensate")
+        status = (
+            f"Over-confident by {bias:.1f}pp -- reducing probabilities "
+            f"by {adjustment:.1f}pp"
+        )
     else:
-        status = (f"Under-confident by {abs(bias):.1f}pp -- increasing probabilities by "
-                  f"{abs(adjustment):.1f}pp to compensate")
+        status = (
+            f"Under-confident by {abs(bias):.1f}pp -- increasing probabilities "
+            f"by {abs(adjustment):.1f}pp"
+        )
+
+    if use_backtest and live_count < CALIBRATION_LIVE_THRESHOLD:
+        remaining = CALIBRATION_LIVE_THRESHOLD - live_count
+        status += (
+            f"\n  [dim]Using backtest data to supplement "
+            f"({live_count} live picks -- backtest phases out after "
+            f"{remaining} more live picks)[/dim]"
+        )
 
     return {
-        "n_resolved": len(resolved), "actual_hit_rate": round(actual_hit_rate, 1),
-        "avg_predicted_prob": round(avg_predicted, 1), "calibration_bias": round(bias, 2),
-        "prob_adjustment": round(adjustment, 2), "avg_return_pct": round(avg_return, 2),
-        "calibrated": True, "status": status,
+        "n_resolved":        n_resolved,
+        "actual_hit_rate":   round(actual_hit_rate, 1),
+        "avg_predicted_prob": round(avg_predicted, 1),
+        "calibration_bias":  round(bias, 2),
+        "prob_adjustment":   round(adjustment, 2),
+        "avg_return_pct":    round(avg_return, 2),
+        "calibrated":        True,
+        "live_count":        live_count,
+        "backtest_used":     use_backtest,
+        "status":            status,
     }
 
 
 def print_performance_report(cal: dict):
     """Print the historical performance and calibration panel at startup."""
     if cal["n_resolved"] == 0:
-        console.print("[dim]No resolved outcomes yet -- report appears after first 7-day window.[/dim]\n")
+        console.print(
+            "[dim]No resolved outcomes yet -- run Backtest mode (B) to "
+            "bootstrap calibration immediately, or wait for live picks "
+            "to accumulate.[/dim]\n"
+        )
         return
 
-    lines = [f"[bold]Historical Performance[/bold]  [dim]({cal['n_resolved']} resolved pick(s))[/dim]\n"]
+    lines = [
+        f"[bold]Historical Performance[/bold]  "
+        f"[dim]({cal['n_resolved']} weighted pick(s)  |  "
+        f"{cal['live_count']} live)[/dim]\n"
+    ]
 
     if cal["actual_hit_rate"] is not None:
-        hc = ("bright_green" if cal["actual_hit_rate"] >= 50
-              else "yellow" if cal["actual_hit_rate"] >= 35 else "red")
-        lines.append(f"  Hit rate:   [{hc}]{cal['actual_hit_rate']:.1f}%[/{hc}]  "
-                     f"[dim](model predicted avg {cal['avg_predicted_prob']:.1f}%)[/dim]")
+        hc = (
+            "bright_green" if cal["actual_hit_rate"] >= 50
+            else "yellow" if cal["actual_hit_rate"] >= 35 else "red"
+        )
+        lines.append(
+            f"  Hit rate:   [{hc}]{cal['actual_hit_rate']:.1f}%[/{hc}]  "
+            f"[dim](model predicted avg {cal['avg_predicted_prob']:.1f}%)[/dim]"
+        )
 
     if cal["avg_return_pct"] is not None:
-        rc = "bright_green" if cal["avg_return_pct"] >= 0 else "red"
+        rc   = "bright_green" if cal["avg_return_pct"] >= 0 else "red"
         lines.append(f"  Avg return: [{rc}]{cal['avg_return_pct']:+.2f}%[/{rc}]")
+
+    if cal.get("backtest_used"):
+        lines.append(f"\n  [dim]Calibration includes backtest data (weighted).[/dim]")
 
     lines.append(f"\n  Calibration: [italic]{cal['status']}[/italic]")
 
     if cal["calibrated"] and abs(cal["prob_adjustment"]) >= 1.0:
         d = "reduced" if cal["prob_adjustment"] > 0 else "increased"
-        lines.append(f"  [dim]Today's probabilities {d} by {abs(cal['prob_adjustment']):.1f}pp.[/dim]")
+        lines.append(
+            f"  [dim]Today's probabilities {d} by "
+            f"{abs(cal['prob_adjustment']):.1f}pp.[/dim]"
+        )
 
     console.print(Panel("\n".join(lines), title="Track Record", box=box.ROUNDED))
     console.print()
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _load_resolved(filepath: str) -> list:
+    """Load resolved picks from a CSV file. Returns empty list if unavailable."""
+    if not os.path.isfile(filepath):
+        return []
+    rows = []
+    try:
+        with open(filepath, "r", newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                if row.get("outcome_hit", "").strip() in ("YES", "NO"):
+                    rows.append(row)
+    except Exception:
+        pass
+    return rows

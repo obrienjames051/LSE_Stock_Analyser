@@ -280,3 +280,22 @@ SECTOR_SENSITIVITY["general"] = {
     "Chemicals": -0.3, "Materials": -0.3, "Retail": -0.4, "ConsDis": -0.5,
     "Leisure": -0.5, "RealEstate": -0.4,
 }
+
+# ---------------------------------------------------------------------------
+# BACKTESTING
+# ---------------------------------------------------------------------------
+
+BACKTEST_TECHNICAL_CSV  = "lse_backtest_technical.csv"
+BACKTEST_NEWS_CSV       = "lse_backtest_news.csv"
+
+BACKTEST_WEEKS_TECHNICAL = 52   # How many weeks of technical-only history to test
+BACKTEST_WEEKS_NEWS      = 4    # How many weeks of news-enhanced history to test
+
+# Calibration weights for each data source
+# Live picks are always 1.0 (the reference point)
+CALIBRATION_WEIGHT_LIVE      = 1.0
+CALIBRATION_WEIGHT_TECHNICAL = 0.6   # Historical but news-blind
+CALIBRATION_WEIGHT_NEWS      = 0.3   # Full model but news not truly historical
+
+# Once this many live picks are resolved, backtest data is phased out entirely
+CALIBRATION_LIVE_THRESHOLD   = 30
