@@ -1,4 +1,4 @@
-# LSE Stock Analyser v6.1
+# LSE Stock Analyser v7.0
 
 A Python tool that screens London Stock Exchange stocks using technical analysis, company news sentiment, and macro/sector intelligence to identify the five most likely to rise over the next seven calendar days. For each pick it suggests a target price, stop-loss, take-profit limit, and a position size based on your available capital.
 
