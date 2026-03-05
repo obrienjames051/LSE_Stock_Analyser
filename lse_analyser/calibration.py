@@ -127,6 +127,7 @@ def compute_calibration() -> dict:
     neutral = {
         "n_resolved": 0, "actual_hit_rate": None, "avg_predicted_prob": None,
         "calibration_bias": 0.0, "prob_adjustment": 0.0, "avg_return_pct": None,
+        "kelly_avg_return": None,
         "calibrated": False, "live_count": 0, "backtest_used": False,
         "status": f"Not yet calibrated (need {MIN_OUTCOMES_TO_CALIBRATE} resolved picks)",
     }
@@ -160,10 +161,14 @@ def compute_calibration() -> dict:
         )
         return neutral
 
-    # Compute weighted hit rate and predicted prob
+    # Compute weighted directional accuracy (stock ended week above entry)
+    # and predicted prob -- now represents "probability of rising"
     total_weight     = sum(w for _, w in weighted_pool)
-    weighted_hits    = sum(
-        w for row, w in weighted_pool if row.get("outcome_hit") == "YES"
+
+    # Directional hit: outcome_return_pct > 0 means stock rose
+    weighted_dir_hits = sum(
+        w for row, w in weighted_pool
+        if _is_directional_hit(row)
     )
     weighted_probs   = []
     weighted_returns = []
@@ -179,7 +184,7 @@ def compute_calibration() -> dict:
             pass
 
     n_resolved      = len(weighted_pool)
-    actual_hit_rate = (weighted_hits / total_weight) * 100
+    actual_hit_rate = (weighted_dir_hits / total_weight) * 100
     avg_predicted   = (
         sum(p * w for p, w in weighted_probs) / sum(w for _, w in weighted_probs)
         if weighted_probs else 50.0
@@ -188,6 +193,27 @@ def compute_calibration() -> dict:
         sum(r * w for r, w in weighted_returns) / sum(w for _, w in weighted_returns)
         if weighted_returns else 0.0
     )
+
+    # Kelly-weighted return: weight each pick's return by its allocation_pct
+    # This reflects what you'd actually earn under realistic position sizing
+    kelly_weighted_returns = []
+    for row, w in weighted_pool:
+        try:
+            ret      = float(row["outcome_return_pct"])
+            alloc    = float(row["allocation_pct"])
+            kelly_weighted_returns.append((ret, alloc, w))
+        except (ValueError, KeyError):
+            pass
+
+    if kelly_weighted_returns:
+        # Within each calibration-weighted pick, weight by allocation_pct
+        total_kw = sum(alloc * w for _, alloc, w in kelly_weighted_returns)
+        kelly_avg_return = (
+            sum(ret * alloc * w for ret, alloc, w in kelly_weighted_returns) / total_kw
+            if total_kw > 0 else 0.0
+        )
+    else:
+        kelly_avg_return = None
 
     if n_resolved < MIN_OUTCOMES_TO_CALIBRATE:
         neutral["n_resolved"] = n_resolved
@@ -229,6 +255,7 @@ def compute_calibration() -> dict:
         "calibration_bias":  round(bias, 2),
         "prob_adjustment":   round(adjustment, 2),
         "avg_return_pct":    round(avg_return, 2),
+        "kelly_avg_return":  round(kelly_avg_return, 2) if kelly_avg_return is not None else None,
         "calibrated":        True,
         "live_count":        live_count,
         "backtest_used":     use_backtest,
@@ -254,17 +281,21 @@ def print_performance_report(cal: dict):
 
     if cal["actual_hit_rate"] is not None:
         hc = (
-            "bright_green" if cal["actual_hit_rate"] >= 50
-            else "yellow" if cal["actual_hit_rate"] >= 35 else "red"
+            "bright_green" if cal["actual_hit_rate"] >= 55
+            else "yellow" if cal["actual_hit_rate"] >= 48 else "red"
         )
         lines.append(
-            f"  Hit rate:   [{hc}]{cal['actual_hit_rate']:.1f}%[/{hc}]  "
-            f"[dim](model predicted avg {cal['avg_predicted_prob']:.1f}%)[/dim]"
+            f"  Directional accuracy: [{hc}]{cal['actual_hit_rate']:.1f}%[/{hc}]  "
+            f"[dim](model predicted avg {cal['avg_predicted_prob']:.1f}% probability of rising)[/dim]"
         )
 
     if cal["avg_return_pct"] is not None:
         rc   = "bright_green" if cal["avg_return_pct"] >= 0 else "red"
-        lines.append(f"  Avg return: [{rc}]{cal['avg_return_pct']:+.2f}%[/{rc}]")
+        lines.append(f"  Avg return (simple):         [{rc}]{cal['avg_return_pct']:+.2f}%[/{rc}]  [dim]per pick, unweighted[/dim]")
+
+    if cal.get("kelly_avg_return") is not None:
+        kc   = "bright_green" if cal["kelly_avg_return"] >= 0 else "red"
+        lines.append(f"  Avg return (Kelly-weighted): [{kc}]{cal['kelly_avg_return']:+.2f}%[/{kc}]  [dim]weighted by position size[/dim]")
 
     if cal.get("backtest_used"):
         lines.append(f"\n  [dim]Calibration includes backtest data (weighted).[/dim]")
@@ -297,3 +328,16 @@ def _load_resolved(filepath: str) -> list:
     except Exception:
         pass
     return rows
+
+
+def _is_directional_hit(row: dict) -> bool:
+    """
+    Returns True if the stock ended the week above its entry price.
+    This is the directional accuracy measure -- did the model correctly
+    predict the stock would rise, regardless of whether it hit the target.
+    """
+    try:
+        return float(row["outcome_return_pct"]) > 0
+    except (ValueError, KeyError):
+        # Fall back to target hit if return not available
+        return row.get("outcome_hit") == "YES"

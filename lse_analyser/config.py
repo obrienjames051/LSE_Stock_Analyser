@@ -9,14 +9,30 @@ CSV_FILE     = "lse_screener_log.csv"
 TICKERS_JSON = "ftse_tickers.json"
 
 LOOKBACK_DAYS      = 120
-ATR_MULTIPLIER     = 1.5
+ATR_MULTIPLIER     = 1.0   # Lowered from 1.5 -- more achievable 7-day target
 STOP_MULTIPLIER    = 1.0
 LIMIT_BUFFER       = 0.995
 TOP_N              = 5
 MIN_AVG_VOLUME_GBP = 500_000
 
-PROB_FLOOR     = 40.0
-KELLY_FRACTION = 0.25
+PROB_FLOOR     = 46.0   # Below baseline directional accuracy -- skip
+KELLY_FRACTION = 0.35   # Increased from 0.25 to compensate for lower prob range
+
+# Signal strength thresholds -- recalibrated for directional probability range
+# Baseline directional accuracy is ~55%, so thresholds reflect position within
+# the realistic 45-65% range rather than old inflated 50-70% range
+PROB_STRONG    = 58.0   # Strong signal -- above baseline, favoured
+PROB_MODERATE  = 52.0   # Moderate signal
+PROB_CAUTIOUS  = 46.0   # Cautious signal -- at or below baseline
+
+# Tiered probability thresholds for display
+# Shows probability of rising at each return level based on backtest distribution
+PROB_TIERS = [
+    (0.0,  "rises at all"),
+    (1.0,  "rises > 1%"),
+    (2.0,  "rises > 2%"),
+    (3.0,  "rises > 3%"),
+]
 
 MIN_OUTCOMES_TO_CALIBRATE = 10
 CALIBRATION_WINDOW        = 50
@@ -25,7 +41,7 @@ MAX_CALIBRATION_SHIFT     = 15.0
 CSV_HEADERS = [
     "run_date", "ticker", "sector", "score", "price_p", "target_p",
     "stop_p", "limit_p", "upside_pct", "downside_pct", "prob",
-    "reward_risk", "atr", "allocated_gbp", "shares",
+    "reward_risk", "atr", "allocated_gbp", "allocation_pct", "shares",
     "signals", "outcome_price_p", "outcome_hit", "outcome_return_pct",
     "outcome_notes",
 ]
@@ -290,6 +306,8 @@ BACKTEST_NEWS_CSV       = "lse_backtest_news.csv"
 
 BACKTEST_WEEKS_TECHNICAL = 52   # How many weeks of technical-only history to test
 BACKTEST_WEEKS_NEWS      = 4    # How many weeks of news-enhanced history to test
+BACKTEST_CAPITAL         = 1000.0  # Arbitrary capital for Kelly sizing in backtest
+                                   # Actual amount irrelevant -- only pct return used
 
 # Calibration weights for each data source
 # Live picks are always 1.0 (the reference point)

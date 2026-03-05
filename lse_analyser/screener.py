@@ -161,8 +161,23 @@ def score_ticker(ticker: str, sector: str, prob_adjustment: float = 0.0):
         limit        = round(target * LIMIT_BUFFER, 2)
         upside_pct   = (target - c) / c * 100
         downside_pct = (c - stop) / c * 100
-        raw_prob     = 35.0 + (score / 110) * 40
-        prob         = round(min(78.0, max(20.0, raw_prob - prob_adjustment)), 1)
+
+        # Directional probability: probability the stock rises over the week.
+        # Baseline is 55% (observed directional accuracy). Score scales this
+        # between 45% (weak signals) and 68% (strong signals).
+        raw_prob = 45.0 + (score / 110) * 23.0
+        prob     = round(min(68.0, max(45.0, raw_prob - prob_adjustment)), 1)
+
+        # Tiered probabilities: estimated probability of rising by each threshold.
+        # Scaled from backtest distribution -- observed at 55% baseline:
+        # 55% rose at all, 43% rose >1%, 31% rose >2%, 23% rose >3%
+        tier_scale = prob / 55.0
+        prob_tiers = {
+            "rises_at_all": prob,
+            "rises_1pct":   round(min(prob - 2, 43.0 * tier_scale), 1),
+            "rises_2pct":   round(min(prob - 5, 31.0 * tier_scale), 1),
+            "rises_3pct":   round(min(prob - 8, 23.0 * tier_scale), 1),
+        }
 
         return {
             "ticker":       ticker.replace(".L", ""),
@@ -175,6 +190,7 @@ def score_ticker(ticker: str, sector: str, prob_adjustment: float = 0.0):
             "upside_pct":   upside_pct,
             "downside_pct": downside_pct,
             "prob":         prob,
+            "prob_tiers":   prob_tiers,
             "signals":      signals,
             "atr":          round(atr_v, 4),
             "reward_risk":  round(upside_pct / downside_pct, 2) if downside_pct > 0 else 0,

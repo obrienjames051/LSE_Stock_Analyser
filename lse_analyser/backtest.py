@@ -39,7 +39,7 @@ import yfinance as yf
 from .config import (
     TOP_N, CSV_HEADERS,
     BACKTEST_TECHNICAL_CSV, BACKTEST_NEWS_CSV,
-    BACKTEST_WEEKS_TECHNICAL, BACKTEST_WEEKS_NEWS,
+    BACKTEST_WEEKS_TECHNICAL, BACKTEST_WEEKS_NEWS, BACKTEST_CAPITAL,
 )
 from .utils import console, silent
 from .tickers import get_tickers
@@ -48,6 +48,7 @@ from .news import fetch_news_sentiment, apply_news_adjustment
 from .macro import (
     fetch_macro_sentiment, fetch_sector_sentiment, apply_macro_to_pick,
 )
+from .sizing import calculate_allocations
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -213,7 +214,11 @@ def _score_week_technical(
         except Exception:
             continue
 
-    return [r for r in top if r.get("outcome_hit")]
+    # Apply Kelly sizing so allocation_pct is stored for weighted return calc
+    resolved = [r for r in top if r.get("outcome_hit")]
+    if resolved:
+        calculate_allocations(resolved, BACKTEST_CAPITAL)
+    return resolved
 
 
 def _score_historical(ticker, sector, hist, atr_mult, stop_mult, limit_buf):
@@ -301,7 +306,7 @@ def _score_historical(ticker, sector, hist, atr_mult, stop_mult, limit_buf):
     limit        = round(target * limit_buf, 2)
     upside_pct   = (target - c) / c * 100
     downside_pct = (c - stop) / c * 100
-    prob         = round(min(78.0, max(20.0, 35.0 + (score / 110) * 40)), 1)
+    prob         = round(min(68.0, max(45.0, 45.0 + (score / 110) * 23.0)), 1)
 
     return {
         "ticker":       ticker.replace(".L", ""),
@@ -425,7 +430,10 @@ def _run_news_backtest(tickers: dict, n_weeks: int) -> list:
             except Exception:
                 continue
 
-        all_results.extend([r for r in top if r.get("outcome_hit")])
+        resolved_week = [r for r in top if r.get("outcome_hit")]
+        if resolved_week:
+            calculate_allocations(resolved_week, BACKTEST_CAPITAL)
+        all_results.extend(resolved_week)
 
     return all_results
 
@@ -496,6 +504,7 @@ def _save_backtest_results(results: list, filepath: str):
                 "reward_risk":        r.get("reward_risk", ""),
                 "atr":                r.get("atr", ""),
                 "allocated_gbp":      "",
+                "allocation_pct":     round(r["allocation_pct"], 2) if r.get("allocation_pct") else "",
                 "shares":             "",
                 "signals":            " | ".join(r["signals"]) if r.get("signals") else "",
                 "outcome_price_p":    r.get("outcome_price_p", ""),

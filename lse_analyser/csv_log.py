@@ -34,6 +34,7 @@ def save_to_csv(picks: list, run_date: str):
                 "reward_risk":        r["reward_risk"],
                 "atr":                r["atr"],
                 "allocated_gbp":      r.get("allocated_gbp", ""),
+                "allocation_pct":     r.get("allocation_pct", ""),
                 "shares":             r.get("shares", ""),
                 "signals":            " | ".join(r["signals"]),
                 "outcome_price_p":    "",

@@ -82,9 +82,9 @@ LSE_Stock_Analyser/
 
 ## Recommended usage
 
-**Run once a week on Sunday evening or after 16:45 on Friday.** The prediction window is seven calendar days, so weekly runs give you clean, non-overlapping rounds of picks. Running more frequently would create overlapping positions and muddy the calibration data.
+**Run at 7:30am on Monday morning.** This captures any news that broke over the weekend — geopolitical events, company announcements, macro developments — before you commit to any positions. The prediction window is seven calendar days, so weekly Monday runs give you clean, non-overlapping rounds of picks. Running more frequently would create overlapping positions and muddy the calibration data.
 
-The 16:45 timing matters because Yahoo Finance data for LSE stocks is delayed by approximately 15 minutes, and the LSE closes at 16:30. Running before 16:45 risks using incomplete data where the "closing" price is actually a mid-session price rather than the true close.
+The 7:30am timing works because Yahoo Finance uses Friday's closing prices for LSE stocks over the weekend, so the technical analysis is based on clean end-of-week data. The news and macro sentiment layers will reflect anything that happened over the weekend, giving you the most complete picture possible before the market opens.
 
 Each time you run the script it will automatically:
 1. Resolve any picks from seven or more days ago by fetching their actual outcome prices
@@ -98,17 +98,21 @@ On your very first run, consider choosing **Backtest mode (B)** before making an
 
 After roughly four to six weeks (ten or more resolved picks) the self-calibration will start meaningfully adjusting the model's outputs based on its real track record.
 
-### Monday morning workflow
+### Weekly workflow
 
-After running the script on Sunday evening, check each pick on Monday morning after the market opens at 8am. Stocks sometimes gap up or down over the weekend, which can make a pick's entry less attractive:
+**7:30am Monday** — run the programme in Live mode. The news and macro sentiment layers will capture anything that broke over the weekend. Review the picks and note the macro warning panel if present.
+
+**8:00am Monday** — the LSE opens. Check the opening price of each pick against Friday's closing price. The gap (if any) only becomes visible at this point since the programme runs off Friday's close and the Monday opening price isn't known until the market opens.
 
 - If a stock has gapped **significantly upward**, the predicted upside may already be consumed — consider skipping it
-- If a stock has gapped **significantly downward** and is already near or below its stop price, the thesis has been invalidated before you have even entered — skip it
-- If the gap is **negligible**, the pick is still valid and you can place your limit buy order as planned
+- If a stock has gapped **significantly downward** and is already near or below its stop price, the thesis has been invalidated — skip it
+- If the gap is **negligible**, the pick is still valid
+
+**8:00–8:15am** — place limit buy orders for picks that pass the gap check. Waiting briefly after open is better practice than placing orders pre-market, as spreads tend to be wider in the first few minutes of trading.
 
 As a general guide, a gap of more than ±1% warrants reassessment of the R:R before entering. A gap beyond the stop price is an automatic skip.
 
-**From v6.0 onwards the script will warn you directly** if macro conditions suggest elevated risk — see the Macro Warning section below.
+**If a major unexpected macro event occurs over the weekend** that the programme couldn't have anticipated, check the macro warning panel carefully. If the model is recommending skipping the week, take that seriously.
 
 ### Selling
 
@@ -378,7 +382,7 @@ None of these need to be created or edited manually. If you want to review your 
 ## Important notes
 
 - **All prices in the tables are in pence, not pounds.** A price of 2340 means £23.40. The exception is the Position Sizing table, where the "Price (£)" and "Invest (£)" columns are already converted to pounds.
-- **Data comes from Yahoo Finance** and is typically delayed by around 15 minutes for LSE stocks. The script is designed for end-of-day use — run after 16:45 to ensure Friday closing prices are fully settled.
+- **Data comes from Yahoo Finance** and uses Friday's closing prices for LSE stocks over the weekend. Running at 7:30am Monday ensures the technical analysis is based on clean end-of-week data while the news sentiment captures any weekend developments.
 - **The script screens approximately 350 FTSE 100/250 tickers**, fetched live from Wikipedia on each run.
 - **News and macro sentiment use NewsAPI**, which provides up to 1,000 requests per day on the plan used. A typical run makes 26–36 requests (20 company searches, 1 market-wide search, up to 5 sector searches), well within the daily limit.
 - **The probability figures are model estimates**, not guaranteed odds. They reflect the historical hit rate of similar technical setups, adjusted for the model's own track record, current news sentiment, and macro/sector conditions.
