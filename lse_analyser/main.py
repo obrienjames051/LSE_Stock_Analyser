@@ -26,6 +26,7 @@ from .display import (
     print_macro_table, print_disclaimer,
 )
 from .history import show_history
+from .spotlight import run_spotlight
 from .backtest import run_backtest
 from .news import fetch_news_sentiment, apply_news_adjustment
 from .macro import (
@@ -40,15 +41,17 @@ def ask_for_mode() -> str:
         "[dim]  [L] Live mode    -- results saved to CSV log (use once a week)\n"
         "  [P] Preview mode -- results shown but nothing saved\n"
         "  [H] History      -- view a previous week's predictions and outcomes\n"
-        "  [B] Backtest     -- simulate historical runs to bootstrap calibration[/dim]\n"
+        "  [B] Backtest     -- simulate historical runs to bootstrap calibration\n"
+        "  [S] Spotlight    -- full analysis on a single stock[/dim]\n"
     )
     while True:
-        raw = input("  Choose mode (L / P / H / B): ").strip().upper()
+        raw = input("  Choose mode (L / P / H / B / S): ").strip().upper()
         if raw in ("L", "LIVE"):        return "live"
         elif raw in ("P", "PREVIEW"):   return "preview"
         elif raw in ("H", "HISTORY"):   return "history"
         elif raw in ("B", "BACKTEST"):  return "backtest"
-        else: console.print("  [red]Please enter L, P, H, or B[/red]")
+        elif raw in ("S", "SPOTLIGHT"): return "spotlight"
+        else: console.print("  [red]Please enter L, P, H, B, or S[/red]")
 
 
 def _run_company_news(candidates: list) -> list:
@@ -257,11 +260,15 @@ def main():
         run_backtest()
         return
 
+    if mode == "spotlight":
+        run_spotlight()
+        return
+
     live_mode  = (mode == "live")
     mode_label = "[green]LIVE[/green]" if live_mode else "[yellow]PREVIEW[/yellow]"
 
     console.print(Panel(
-        f"[bold cyan]LSE Stock Screener  v7.0[/bold cyan]\n"
+        f"[bold cyan]LSE Stock Screener  v5.1[/bold cyan]\n"
         f"[dim]Run at {run_date}[/dim]  --  Mode: {mode_label}\n\n"
         "[dim]Features:  Volume filter  |  Sector diversification  |  Event filter\n"
         "          Company news  |  Macro & sector sentiment  |  "
