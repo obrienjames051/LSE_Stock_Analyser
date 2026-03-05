@@ -4,8 +4,24 @@ sizing.py
 Kelly-based position sizing and capital input prompt.
 """
 
-from .config import PROB_FLOOR, KELLY_FRACTION
+from .config import PROB_FLOOR, KELLY_FRACTION, PROB_STRONG, PROB_MODERATE, PROB_CAUTIOUS
 from .utils import console
+
+
+def signal_label(prob: float) -> str:
+    """
+    Return a signal strength label based on the recalibrated directional
+    probability thresholds. Thresholds reflect position within the realistic
+    45-68% directional probability range rather than old inflated values.
+    """
+    if prob >= PROB_STRONG:
+        return "Strong signal -- favoured"
+    elif prob >= PROB_MODERATE:
+        return "Moderate signal"
+    elif prob >= PROB_CAUTIOUS:
+        return "Cautious signal"
+    else:
+        return "Weak signal -- small stake only"
 
 
 def calculate_allocations(picks: list, total_capital: float):

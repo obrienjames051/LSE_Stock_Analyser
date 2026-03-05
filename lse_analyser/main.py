@@ -26,6 +26,7 @@ from .display import (
     print_macro_table, print_disclaimer,
 )
 from .history import show_history
+from .backtest import run_backtest
 from .news import fetch_news_sentiment, apply_news_adjustment
 from .macro import (
     fetch_macro_sentiment, fetch_sector_sentiment,
@@ -38,14 +39,16 @@ def ask_for_mode() -> str:
         "\n[bold cyan]Run mode[/bold cyan]\n"
         "[dim]  [L] Live mode    -- results saved to CSV log (use once a week)\n"
         "  [P] Preview mode -- results shown but nothing saved\n"
-        "  [H] History      -- view a previous week's predictions and outcomes[/dim]\n"
+        "  [H] History      -- view a previous week's predictions and outcomes\n"
+        "  [B] Backtest     -- simulate historical runs to bootstrap calibration[/dim]\n"
     )
     while True:
-        raw = input("  Choose mode (L / P / H): ").strip().upper()
-        if raw in ("L", "LIVE"):       return "live"
-        elif raw in ("P", "PREVIEW"):  return "preview"
-        elif raw in ("H", "HISTORY"):  return "history"
-        else: console.print("  [red]Please enter L, P, or H[/red]")
+        raw = input("  Choose mode (L / P / H / B): ").strip().upper()
+        if raw in ("L", "LIVE"):        return "live"
+        elif raw in ("P", "PREVIEW"):   return "preview"
+        elif raw in ("H", "HISTORY"):   return "history"
+        elif raw in ("B", "BACKTEST"):  return "backtest"
+        else: console.print("  [red]Please enter L, P, H, or B[/red]")
 
 
 def _run_company_news(candidates: list) -> list:
@@ -250,11 +253,15 @@ def main():
         show_history()
         return
 
+    if mode == "backtest":
+        run_backtest()
+        return
+
     live_mode  = (mode == "live")
     mode_label = "[green]LIVE[/green]" if live_mode else "[yellow]PREVIEW[/yellow]"
 
     console.print(Panel(
-        f"[bold cyan]LSE Stock Screener  v6.0[/bold cyan]\n"
+        f"[bold cyan]LSE Stock Screener  v7.0[/bold cyan]\n"
         f"[dim]Run at {run_date}[/dim]  --  Mode: {mode_label}\n\n"
         "[dim]Features:  Volume filter  |  Sector diversification  |  Event filter\n"
         "          Company news  |  Macro & sector sentiment  |  "

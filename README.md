@@ -1,4 +1,4 @@
-# LSE Stock Analyser v6.0
+# LSE Stock Analyser v6.1
 
 A Python tool that screens London Stock Exchange stocks using technical analysis, company news sentiment, and macro/sector intelligence to identify the five most likely to rise over the next seven calendar days. For each pick it suggests a target price, stop-loss, take-profit limit, and a position size based on your available capital.
 
@@ -57,31 +57,34 @@ No quotes, no spaces around the equals sign. This file is listed in `.gitignore`
 
 ```
 LSE_Stock_Analyser/
-├── main.py                  ← entry point
-├── .env                     ← your API key (gitignored, never uploaded)
-├── .env.example             ← template showing the required format
-├── lse_screener_log.csv     ← auto-created on first Live run
-├── ftse_tickers.json        ← auto-created after first Wikipedia fetch
-└── lse_analyser/            ← the package
-    ├── config.py            ← all tunable parameters
-    ├── tickers.py           ← FTSE constituent list management
-    ├── screener.py          ← data fetching, filters, technical scoring
-    ├── news.py              ← company-level NewsAPI and VADER sentiment
-    ├── macro.py             ← macro/sector sentiment and event classification
-    ├── calibration.py       ← outcome back-filling and self-calibration
-    ├── sizing.py            ← Kelly position sizing
-    ├── csv_log.py           ← CSV saving
-    ├── display.py           ← table rendering
-    └── history.py           ← history viewer
+├── main.py                       ← entry point
+├── .env                          ← your API key (gitignored, never uploaded)
+├── .env.example                  ← template showing the required format
+├── lse_screener_log.csv          ← auto-created on first Live run
+├── lse_backtest_technical.csv    ← auto-created when Backtest mode is run
+├── lse_backtest_news.csv         ← auto-created when Backtest mode is run
+├── ftse_tickers.json             ← auto-created after first Wikipedia fetch
+└── lse_analyser/                 ← the package
+    ├── config.py                 ← all tunable parameters
+    ├── tickers.py                ← FTSE constituent list management
+    ├── screener.py               ← data fetching, filters, technical scoring
+    ├── news.py                   ← company-level NewsAPI and VADER sentiment
+    ├── macro.py                  ← macro/sector sentiment and event classification
+    ├── backtest.py               ← historical backtesting engine
+    ├── calibration.py            ← outcome back-filling and self-calibration
+    ├── sizing.py                 ← Kelly position sizing
+    ├── csv_log.py                ← CSV saving
+    ├── display.py                ← table rendering
+    └── history.py                ← history viewer
 ```
 
 ---
 
 ## Recommended usage
 
-**Run once a week on Sunday evening or after 16:45 on Friday.** The prediction window is seven calendar days, so weekly runs give you clean, non-overlapping rounds of picks. Running more frequently would create overlapping positions and muddy the calibration data.
+**Run at 7:30am on Monday morning.** This captures any news that broke over the weekend — geopolitical events, company announcements, macro developments — before you commit to any positions. The prediction window is seven calendar days, so weekly Monday runs give you clean, non-overlapping rounds of picks. Running more frequently would create overlapping positions and muddy the calibration data.
 
-The 16:45 timing matters because Yahoo Finance data for LSE stocks is delayed by approximately 15 minutes, and the LSE closes at 16:30. Running before 16:45 risks using incomplete data where the "closing" price is actually a mid-session price rather than the true close.
+The 7:30am timing works because Yahoo Finance uses Friday's closing prices for LSE stocks over the weekend, so the technical analysis is based on clean end-of-week data. The news and macro sentiment layers will reflect anything that happened over the weekend, giving you the most complete picture possible before the market opens.
 
 Each time you run the script it will automatically:
 1. Resolve any picks from seven or more days ago by fetching their actual outcome prices
@@ -91,19 +94,25 @@ Each time you run the script it will automatically:
 5. Screen all ~350 FTSE tickers technically, then run company news on the top candidates
 6. Apply sector sensitivity adjustments based on the detected macro event type
 
+On your very first run, consider choosing **Backtest mode (B)** before making any live picks. This simulates a year of historical weekly runs to bootstrap the calibration system immediately rather than waiting weeks for live picks to accumulate.
+
 After roughly four to six weeks (ten or more resolved picks) the self-calibration will start meaningfully adjusting the model's outputs based on its real track record.
 
-### Monday morning workflow
+### Weekly workflow
 
-After running the script on Sunday evening, check each pick on Monday morning after the market opens at 8am. Stocks sometimes gap up or down over the weekend, which can make a pick's entry less attractive:
+**7:30am Monday** — run the programme in Live mode. The news and macro sentiment layers will capture anything that broke over the weekend. Review the picks and note the macro warning panel if present.
+
+**8:00am Monday** — the LSE opens. Check the opening price of each pick against Friday's closing price. The gap (if any) only becomes visible at this point since the programme runs off Friday's close and the Monday opening price isn't known until the market opens.
 
 - If a stock has gapped **significantly upward**, the predicted upside may already be consumed — consider skipping it
-- If a stock has gapped **significantly downward** and is already near or below its stop price, the thesis has been invalidated before you have even entered — skip it
-- If the gap is **negligible**, the pick is still valid and you can place your limit buy order as planned
+- If a stock has gapped **significantly downward** and is already near or below its stop price, the thesis has been invalidated — skip it
+- If the gap is **negligible**, the pick is still valid
+
+**8:00–8:15am** — place limit buy orders for picks that pass the gap check. Waiting briefly after open is better practice than placing orders pre-market, as spreads tend to be wider in the first few minutes of trading.
 
 As a general guide, a gap of more than ±1% warrants reassessment of the R:R before entering. A gap beyond the stop price is an automatic skip.
 
-**From v6.0 onwards the script will warn you directly** if macro conditions suggest elevated risk — see the Macro Warning section below.
+**If a major unexpected macro event occurs over the weekend** that the programme couldn't have anticipated, check the macro warning panel carefully. If the model is recommending skipping the week, take that seriously.
 
 ### Selling
 
@@ -207,6 +216,7 @@ The first thing the script asks on every run is which mode to use:
 - **Live mode (L)** — the full run. Outcome back-filling and CSV saving are both active. Use this for your weekly run.
 - **Preview mode (P)** — everything runs as normal (screening, news sentiment, macro analysis, calibration report, tables, position sizing) but nothing is written to the CSV. Use this if you want to check the current picks mid-week without it counting as your weekly log entry.
 - **History mode (H)** — skips the screener entirely and lets you browse past runs. You will be shown a numbered list of all previous Live runs with their hit rates, and can select any one to see the full predictions table alongside the actual outcomes.
+- **Backtest mode (B)** — simulates historical weekly runs to bootstrap the calibration system. See the Backtesting section below for full details.
 
 Keeping Live and Preview separate ensures the calibration data stays clean — one set of picks per week, each with a full seven days to resolve before the next run is logged.
 
@@ -272,6 +282,33 @@ This means macro sentiment never applies a flat dampener to all picks equally. A
 
 ---
 
+## Backtesting
+
+Backtest mode simulates historical weekly runs to bootstrap the calibration system immediately rather than waiting weeks for live picks to accumulate. It runs two phases:
+
+**Phase 1 — Technical backtest (52 weeks)**
+Simulates a full year of weekly runs using only technical scoring on historical price data. News and macro sentiment are excluded because genuinely historical article data is not available. Produces approximately 260 resolved picks and saves them to `lse_backtest_technical.csv`. These results carry a calibration weight of **0.6** — lower than live picks because news context is absent.
+
+**Phase 2 — News-enhanced backtest (4 weeks)**
+Reruns the last 4 weeks with company, sector, and macro news included. Note that NewsAPI returns articles filtered by date but drawn from its current index — it is not a perfect reconstruction of what news was available on a specific Sunday evening. Results are saved to `lse_backtest_news.csv` and carry a calibration weight of **0.3**, reflecting this limitation.
+
+**How the calibration uses all three sources**
+
+The calibration engine reads from all three CSV files and combines them using weighted averaging:
+
+| Source | File | Weight | Phases out when |
+|---|---|---|---|
+| Live picks | `lse_screener_log.csv` | 1.0 | Never |
+| Technical backtest | `lse_backtest_technical.csv` | 0.6 | 30 live picks |
+| News backtest | `lse_backtest_news.csv` | 0.3 | 30 live picks |
+
+Once you have 30 resolved live picks the backtest data is phased out automatically and the calibration relies entirely on your real trading history. At that point the backtest has served its purpose.
+
+**When to run it**
+Backtest mode is designed to be run once or twice — ideally before your first Live run so the calibration is active from day one. It takes 10–20 minutes due to the volume of historical price data being downloaded. Both output CSV files are created automatically.
+
+---
+
 ## How the self-calibration works
 
 Every pick is saved to `lse_screener_log.csv`. Seven days later, when you run the script again, it automatically fetches each stock's actual closing price and records:
@@ -308,7 +345,12 @@ These are in `lse_analyser/config.py` and can be adjusted if needed:
 | `MACRO_WARNING_THRESHOLD` | -0.4 | Macro score below which a caution panel is shown |
 | `MACRO_SKIP_THRESHOLD` | -0.6 | Macro score below which a skip recommendation is shown |
 | `MACRO_MAX_PROB_SHIFT` | 15.0 | Maximum probability adjustment (pp) from macro + sector sentiment combined |
-| `SECTOR_REPLACE_THRESHOLD` | -0.25 | Sector sentiment score below which a pick is flagged for replacement |
+| `BACKTEST_WEEKS_TECHNICAL` | 52 | Number of weeks simulated in Phase 1 of the backtest |
+| `BACKTEST_WEEKS_NEWS` | 4 | Number of weeks simulated in Phase 2 of the backtest |
+| `CALIBRATION_WEIGHT_LIVE` | 1.0 | Calibration weight for live picks |
+| `CALIBRATION_WEIGHT_TECHNICAL` | 0.6 | Calibration weight for technical backtest picks |
+| `CALIBRATION_WEIGHT_NEWS` | 0.3 | Calibration weight for news backtest picks |
+| `CALIBRATION_LIVE_THRESHOLD` | 30 | Live picks needed before backtest data is phased out |
 
 ---
 
@@ -323,18 +365,24 @@ These are in `lse_analyser/config.py` and can be adjusted if needed:
 
 ---
 
-## The CSV log
+## Data files
 
-`lse_screener_log.csv` is created automatically on the first Live run in the same folder as `main.py`. It stores every pick made, along with the auto-filled outcome columns once seven days have passed. You do not need to edit it manually.
+Three CSV files are used to track picks and calibration data:
 
-If you want to review your historical performance outside the script, you can open it in Excel or any spreadsheet application.
+| File | Created by | Purpose |
+|---|---|---|
+| `lse_screener_log.csv` | First Live run | Logs all live picks and their outcomes |
+| `lse_backtest_technical.csv` | Backtest mode | Stores Phase 1 technical backtest results |
+| `lse_backtest_news.csv` | Backtest mode | Stores Phase 2 news-enhanced backtest results |
+
+None of these need to be created or edited manually. If you want to review your historical performance outside the script, you can open any of them in Excel or a spreadsheet application.
 
 ---
 
 ## Important notes
 
 - **All prices in the tables are in pence, not pounds.** A price of 2340 means £23.40. The exception is the Position Sizing table, where the "Price (£)" and "Invest (£)" columns are already converted to pounds.
-- **Data comes from Yahoo Finance** and is typically delayed by around 15 minutes for LSE stocks. The script is designed for end-of-day use — run after 16:45 to ensure Friday closing prices are fully settled.
+- **Data comes from Yahoo Finance** and uses Friday's closing prices for LSE stocks over the weekend. Running at 7:30am Monday ensures the technical analysis is based on clean end-of-week data while the news sentiment captures any weekend developments.
 - **The script screens approximately 350 FTSE 100/250 tickers**, fetched live from Wikipedia on each run.
 - **News and macro sentiment use NewsAPI**, which provides up to 1,000 requests per day on the plan used. A typical run makes 26–36 requests (20 company searches, 1 market-wide search, up to 5 sector searches), well within the daily limit.
 - **The probability figures are model estimates**, not guaranteed odds. They reflect the historical hit rate of similar technical setups, adjusted for the model's own track record, current news sentiment, and macro/sector conditions.
