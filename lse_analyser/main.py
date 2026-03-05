@@ -27,6 +27,7 @@ from .display import (
 )
 from .history import show_history
 from .backtest import run_backtest
+from .news import fetch_news_sentiment, apply_news_adjustment
 from .macro import (
     fetch_macro_sentiment, fetch_sector_sentiment,
     apply_macro_to_pick, check_macro_warning, sector_needs_replacement,

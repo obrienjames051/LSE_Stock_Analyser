@@ -182,7 +182,10 @@ def _score_week_technical(
     # Fill in outcomes
     outcome_date_pd = pd.Timestamp(outcome_date)
     for r in top:
-        df = price_data.get(r["ticker"] + ".L") or price_data.get(r["ticker"])
+        ticker_key = r["ticker"] + ".L"
+        df = price_data.get(ticker_key)
+        if df is None:
+            df = price_data.get(r["ticker"])
         if df is None:
             continue
         try:
@@ -331,7 +334,7 @@ def _run_news_backtest(tickers: dict, n_weeks: int) -> list:
     Simulate the last n_weeks of weekly runs with news sentiment included.
     Uses the same technical scoring as Phase 1, then adds news/macro layers.
     """
-    price_data  = _download_all_prices(tickers, period="35d")
+    price_data  = _download_all_prices(tickers, period="200d")
     all_results = []
     now         = datetime.now()
 
@@ -393,7 +396,10 @@ def _run_news_backtest(tickers: dict, n_weeks: int) -> list:
         # Fill outcomes
         outcome_date_pd = pd.Timestamp(outcome_date)
         for r in top:
-            df = price_data.get(r["ticker"] + ".L") or price_data.get(r["ticker"])
+            ticker_key = r["ticker"] + ".L"
+            df = price_data.get(ticker_key)
+            if df is None:
+                df = price_data.get(r["ticker"])
             if df is None:
                 continue
             try:
