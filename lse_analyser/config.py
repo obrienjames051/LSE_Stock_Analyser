@@ -317,3 +317,9 @@ CALIBRATION_WEIGHT_NEWS      = 0.3   # Full model but news not truly historical
 
 # Once this many live picks are resolved, backtest data is phased out entirely
 CALIBRATION_LIVE_THRESHOLD   = 30
+
+# Fixed end date for all backtests -- ensures every script uses the same
+# 52-week window regardless of what day it is run. Set to the Monday of
+# the week the original Phase 1 backtest was completed.
+# To extend the backtest window, update this date to the current Monday.
+BACKTEST_END_DATE = "2026-03-02"  # Monday 2 March 2026
