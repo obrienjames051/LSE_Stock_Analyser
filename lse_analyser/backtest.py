@@ -81,6 +81,7 @@ def run_backtest():
     )
 
     _print_backtest_summary(results)
+    _update_baseline_return(results)
 
 
 # ── Phase 1: technical backtest ───────────────────────────────────────────────
@@ -148,6 +149,8 @@ def _score_week(tickers, price_data, sim_monday, entry_tuesday, exit_monday):
         return []
 
     results.sort(key=lambda x: x["score"], reverse=True)
+    # diversify() implements the confirmed Strategy E method (div→cap at score 85)
+    # matching the live programme exactly -- see RESEARCH.md §15
     top = diversify(results, TOP_N)
 
     entry_tuesday_pd = pd.Timestamp(entry_tuesday)
@@ -328,7 +331,7 @@ def _score_historical(ticker, sector, hist):
     stop         = round(c - STOP_MULTIPLIER * atr_v, 2)
     upside_pct   = (target - c) / c * 100
     downside_pct = (c - stop) / c * 100
-    prob         = round(min(68.0, max(45.0, 45.0 + (score / 110) * 23.0)), 1)
+    prob         = round(min(68.0, max(45.0, 45.0 + (score / 84) * 23.0)), 1)  # rescaled: cap at 84
 
     return {
         "ticker":             ticker.replace(".L", ""),
@@ -429,6 +432,53 @@ def _save_backtest_results(results: list, filepath: str):
                 "went_up":            r.get("went_up", ""),
                 "profitable":         r.get("profitable", ""),
             })
+
+
+def _update_baseline_return(results: list):
+    """
+    Write the avg return per pick back to config.py as BACKTEST_BASELINE_RETURN.
+    This keeps the baseline figure in sync with the current backtest method
+    without requiring manual updates after strategy changes.
+    """
+    import re
+    resolved = [r for r in results if r.get("outcome_return_pct") not in ("", None)]
+    if not resolved:
+        return
+
+    returns  = [float(r["outcome_return_pct"]) for r in resolved]
+    avg_ret  = round(sum(returns) / len(returns), 4)
+
+    config_path = os.path.join(os.path.dirname(__file__), "config.py")
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = f.read()
+
+        # Use a broad pattern to handle any whitespace/comment variation
+        new_cfg, n_subs = re.subn(
+            r"^(BACKTEST_BASELINE_RETURN\s*=\s*).*$",
+            f"BACKTEST_BASELINE_RETURN = {avg_ret}   # % per pick per week -- auto-updated by backtest",
+            cfg,
+            flags=re.MULTILINE,
+        )
+
+        if n_subs > 0:
+            if new_cfg != cfg:
+                with open(config_path, "w", encoding="utf-8") as f:
+                    f.write(new_cfg)
+                console.print(
+                    f"[dim]BACKTEST_BASELINE_RETURN updated to {avg_ret}% in config.py[/dim]"
+                )
+            else:
+                console.print(
+                    f"[dim]BACKTEST_BASELINE_RETURN already set to {avg_ret}% -- no change needed.[/dim]"
+                )
+        else:
+            console.print(
+                "[yellow]Could not auto-update BACKTEST_BASELINE_RETURN -- "
+                f"please set it manually to {avg_ret} in config.py[/yellow]"
+            )
+    except Exception as e:
+        console.print(f"[yellow]Could not update BACKTEST_BASELINE_RETURN in config.py: {e}[/yellow]")
 
 
 def _print_backtest_summary(results: list):

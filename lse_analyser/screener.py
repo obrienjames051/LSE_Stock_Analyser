@@ -169,7 +169,7 @@ def score_ticker(ticker: str, sector: str, prob_adjustment: float = 0.0):
         # prob_tiers are intentionally left blank here -- they are calculated
         # AFTER news/macro adjustments in _finalise_prob_tiers(), ensuring
         # they always reflect the final adjusted probability.
-        raw_prob = 45.0 + (score / 110) * 23.0
+        raw_prob = 45.0 + (score / 84) * 23.0   # rescaled: effective cap is score 84
         prob     = round(min(78.0, max(20.0, raw_prob + prob_adjustment)), 1)
 
         return {
@@ -194,19 +194,49 @@ def score_ticker(ticker: str, sector: str, prob_adjustment: float = 0.0):
 
 
 def diversify(results: list, n: int = TOP_N) -> list:
-    """Select top n picks ensuring one stock per sector where possible."""
-    seen, picks = set(), []
+    """
+    Select top n picks using the confirmed Strategy E method (RESEARCH.md §15):
+
+      1. Diversify the full scored universe to a pool of 3x n (max available)
+         ensuring one stock per sector where possible.
+      2. Remove any pick scoring >= SCORE_CAP (85) from that pool.
+         Replacements come from within the already-diversified pool, so
+         sector balance is preserved. If the pool runs out of sub-cap picks,
+         the least over-extended cap+ picks are used as fallback.
+      3. Return the top n by score from the eligible remainder.
+
+    Backtest confirmed this ordering (div→cap) outperforms cap→div by +0.344pp
+    at cap 85, and outperforms no-cap by +0.399pp (avg +1.119% vs +0.720%).
+    """
+    from .config import SCORE_CAP
+
+    # Step 1: diversify to a pool of 3x n
+    pool_size = min(n * 3, len(results))
+    seen, pool = set(), []
     for r in results:
         if r["sector"] not in seen:
-            picks.append(r); seen.add(r["sector"])
-        if len(picks) == n:
-            return picks
+            pool.append(r); seen.add(r["sector"])
+        if len(pool) == pool_size:
+            break
     for r in results:
-        if r not in picks:
-            picks.append(r)
-        if len(picks) == n:
-            return picks
-    return picks
+        if r not in pool:
+            pool.append(r)
+        if len(pool) == pool_size:
+            break
+
+    # Step 2: remove cap+ picks from pool
+    eligible = [r for r in pool if r["score"] < SCORE_CAP]
+    shortfall = n - len(eligible)
+    if shortfall > 0:
+        # Fallback: include least over-extended cap+ picks
+        overflow = sorted(
+            [r for r in pool if r["score"] >= SCORE_CAP],
+            key=lambda x: x["score"]
+        )
+        eligible = eligible + overflow[:shortfall]
+
+    # Step 3: return top n by score
+    return sorted(eligible, key=lambda x: x["score"], reverse=True)[:n]
 
 
 def finalise_prob_tiers(picks: list):

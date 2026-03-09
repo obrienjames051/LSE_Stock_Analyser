@@ -19,7 +19,7 @@ The programme is designed to be run **Tuesday morning before market open**.
 | **Normal exit** | Sell before Monday close (following week) |
 | **Upper limits** | None — hold to exit unless stopped |
 | **Hard stop orders** | Not used — mental stops only |
-| **Baseline return** | +0.760% per pick per week (see RESEARCH.md) |
+| **Baseline return** | +1.119% per pick per week (see RESEARCH.md) |
 
 You can also run the programme on other days (e.g. Friday) in **Preview mode** — it will use all available data up to the current time and display picks, but nothing will be saved.
 
@@ -30,7 +30,7 @@ You can also run the programme on other days (e.g. Friday) in **Preview mode** �
 | Mode | Key | Description |
 |------|-----|-------------|
 | **Live** | L | Run full analysis, save picks to CSV, log news data |
-| **Preview** | P | Run full analysis, display results, nothing saved |
+| **Preview** | P | Run full analysis, display results, news saved but picks not saved |
 | **History** | H | Browse past runs and their outcomes |
 | **Backtest** | B | Simulate ~52 weeks of historical picks to bootstrap calibration |
 | **Spotlight** | S | Full single-stock analysis (not saved) |
@@ -88,7 +88,7 @@ The calibration panel shows:
 
 ## News Logging
 
-Each Live mode run appends to `lse_news_log.csv`, recording the sentiment scores, headlines, and score adjustments used for each pick. This is a pure audit log for future analysis — it is not read by the programme.
+Every run (Live or Preview) appends to `lse_news_log.csv`, recording the sentiment scores, headlines, and score adjustments used for each pick. Running in Preview mode throughout the week therefore builds a continuous record of how sentiment shifts day-to-day, independent of whether picks are saved. This data is a pure audit log for future research — it is not read by the programme.
 
 ---
 

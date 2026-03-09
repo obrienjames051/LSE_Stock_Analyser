@@ -4,7 +4,23 @@ This document records the backtesting research conducted to determine the optima
 
 ---
 
-## Confirmed Strategy (v8.0)
+## Version History
+
+| Version | Key change |
+|---------|-----------|
+| v1.0 | Initial build |
+| v2.0 | ATR stop system |
+| v3.0 | Kelly sizing |
+| v4.0 | News sentiment layer |
+| v5.0 | Macro sentiment layer |
+| v6.0 | Calibration system |
+| v7.0 | Sector diversification (1 per sector) |
+| v8.0 | Tuesday open / Monday close strategy confirmed |
+| **v9.0** | **Strategy E: cap 85 div→cap selection; prob formula rescaled to /84; BACKTEST_BASELINE_RETURN auto-updated by backtest** |
+
+---
+
+## Confirmed Strategy (v9.0)
 
 | Parameter | Value |
 |-----------|-------|
@@ -427,4 +443,4 @@ A critical early discovery was that the original backtest used a single Friday s
 - **51 weeks of data** (not 52) used in Window 2 onwards due to 14-day data cutoff for fair cross-window comparison.
 - **Universe bias**: only picks that the screener actually selected are tested — no counterfactual for picks not made.
 - **BACKTEST_END_DATE must be a Monday.** Currently set to `"2026-03-02"`. Update this date in `config.py` to re-run against a later dataset.
-- **Directional accuracy in `backtest_gap_filter.py` is misleading.** That script computes `went_up` as `exit_price > entry_price`, where `exit_price` may be a stop-triggered close. This means every stop-out is counted as a wrong prediction by construction, producing an artificially low figure (50.2%). The true directional accuracy — whether the stock's end-of-window close was higher than its entry price, regardless of stops — was 55–60% in earlier backtests and is the correct measure of the model's forecasting ability. The v8.0 programme will report this correctly: P(rise) > 50% predicted up, Monday close > Tuesday open = actually went up.
+- **Directional accuracy in `backtest_gap_filter.py` is misleading.** That script computes `went_up` as `exit_price > entry_price`, where `exit_price` may be a stop-triggered close. This means every stop-out is counted as a wrong prediction by construction, producing an artificially low figure (50.2%). The true directional accuracy — whether the stock's end-of-window close was higher than its entry price, regardless of stops — was 55–60% in earlier backtests and is the correct measure of the model's forecasting ability. The v9.0 programme reports this correctly: P(rise) > 50% predicted up, Monday close > Tuesday open = actually went up.
