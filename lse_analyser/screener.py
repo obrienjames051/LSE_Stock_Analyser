@@ -163,26 +163,20 @@ def score_ticker(ticker: str, sector: str, prob_adjustment: float = 0.0):
         downside_pct = (c - stop) / c * 100
 
         # Directional probability: probability the stock rises over the week.
-        # Baseline is 55% (observed directional accuracy). Score scales this
+        # Baseline is ~52% (backtest directional accuracy). Score scales this
         # between 45% (weak signals) and 68% (strong signals).
+        # prob_adjustment is added (positive = boost, negative = reduce).
+        # prob_tiers are intentionally left blank here -- they are calculated
+        # AFTER news/macro adjustments in _finalise_prob_tiers(), ensuring
+        # they always reflect the final adjusted probability.
         raw_prob = 45.0 + (score / 110) * 23.0
-        prob     = round(min(68.0, max(45.0, raw_prob - prob_adjustment)), 1)
-
-        # Tiered probabilities: estimated probability of rising by each threshold.
-        # Scaled from backtest distribution -- observed at 55% baseline:
-        # 55% rose at all, 43% rose >1%, 31% rose >2%, 23% rose >3%
-        tier_scale = prob / 55.0
-        prob_tiers = {
-            "rises_at_all": prob,
-            "rises_1pct":   round(min(prob - 2, 43.0 * tier_scale), 1),
-            "rises_2pct":   round(min(prob - 5, 31.0 * tier_scale), 1),
-            "rises_3pct":   round(min(prob - 8, 23.0 * tier_scale), 1),
-        }
+        prob     = round(min(78.0, max(20.0, raw_prob + prob_adjustment)), 1)
 
         return {
             "ticker":       ticker.replace(".L", ""),
             "sector":       sector,
             "score":        score,
+            "base_score":   score,  # pre-news score for news log
             "price":        c,
             "target":       target,
             "stop":         stop,
@@ -190,7 +184,7 @@ def score_ticker(ticker: str, sector: str, prob_adjustment: float = 0.0):
             "upside_pct":   upside_pct,
             "downside_pct": downside_pct,
             "prob":         prob,
-            "prob_tiers":   prob_tiers,
+            "prob_tiers":   {},     # populated after news/macro by finalise_prob_tiers()
             "signals":      signals,
             "atr":          round(atr_v, 4),
             "reward_risk":  round(upside_pct / downside_pct, 2) if downside_pct > 0 else 0,
@@ -213,3 +207,23 @@ def diversify(results: list, n: int = TOP_N) -> list:
         if len(picks) == n:
             return picks
     return picks
+
+
+def finalise_prob_tiers(picks: list):
+    """
+    Calculate prob_tiers for each pick using the FINAL adjusted probability.
+    Must be called after all news/macro adjustments have been applied.
+
+    Tier scales are derived from the backtest return distribution:
+      ~52% rose at all, ~43% rose >1%, ~31% rose >2%, ~23% rose >3%
+    These scale proportionally with the final prob relative to the 52% baseline.
+    """
+    for r in picks:
+        prob       = r.get("prob", 52.0)
+        tier_scale = prob / 52.0
+        r["prob_tiers"] = {
+            "rises_at_all": round(prob, 1),
+            "rises_1pct":   round(min(prob - 2, 43.0 * tier_scale), 1),
+            "rises_2pct":   round(min(prob - 5, 31.0 * tier_scale), 1),
+            "rises_3pct":   round(min(prob - 8, 23.0 * tier_scale), 1),
+        }

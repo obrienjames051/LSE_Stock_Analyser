@@ -23,9 +23,9 @@ import yfinance as yf
 from rich.panel import Panel
 from rich import box
 
-from .config import ATR_MULTIPLIER, STOP_MULTIPLIER, LIMIT_BUFFER, PROB_FLOOR
+from .config import ATR_MULTIPLIER, STOP_MULTIPLIER, PROB_FLOOR
 from .utils import console, silent
-from .screener import score_ticker
+from .screener import score_ticker, finalise_prob_tiers
 from .news import fetch_news_sentiment, apply_news_adjustment
 from .macro import (
     fetch_macro_sentiment, fetch_sector_sentiment,
@@ -92,6 +92,9 @@ def run_spotlight():
     sector_sent  = fetch_sector_sentiment(sector)
     apply_macro_to_pick(result, macro, sector_sent)
     result["sector_news"] = sector_sent
+
+    # Finalise prob_tiers using the fully adjusted probability
+    finalise_prob_tiers([result])
 
     # Store sector cache for macro table display
     sector_cache = {sector: sector_sent}
@@ -241,7 +244,6 @@ def _print_spotlight_result(
     price_display  = f"{sym}{r['price'] / divisor:,.2f}"
     target_display = f"{sym}{r['target'] / divisor:,.2f}"
     stop_display   = f"{sym}{r['stop'] / divisor:,.2f}"
-    limit_display  = f"{sym}{r['limit'] / divisor:,.2f}"
 
     if is_pence:
         price_display += f"  [dim]({r['price']:.0f}p)[/dim]"

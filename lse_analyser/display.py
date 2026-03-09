@@ -40,7 +40,7 @@ def print_results_table(top: list, cal: dict):
                      f"{abs(cal['prob_adjustment']):.1f}pp by calibration)[/dim italic]")
 
     table = Table(
-        title=f"\n[bold]Top {TOP_N} LSE Stocks -- 7-Day Outlook[/bold]{cal_note}",
+        title=f"\n[bold]Top {TOP_N} LSE Picks -- Tuesday Open / Monday Close[/bold]{cal_note}",
         box=box.ROUNDED, show_lines=True, style="cyan", header_style="bold magenta",
     )
     table.add_column("Rank",           justify="center", style="bold white",  no_wrap=True)
@@ -51,7 +51,6 @@ def print_results_table(top: list, cal: dict):
     table.add_column("Upside",         justify="right",  style="bright_green")
     table.add_column("P(rise)\n[dim]prob. of rising[/dim]", justify="right",  style="bright_cyan")
     table.add_column("Stop (p)",       justify="right",  style="red")
-    table.add_column("Limit (p)",      justify="right",  style="bright_yellow")
     table.add_column("R:R",            justify="center", style="magenta")
     table.add_column("Score",          justify="center", style="white")
     table.add_column("Co. News",       justify="left",   no_wrap=True)
@@ -77,7 +76,7 @@ def print_results_table(top: list, cal: dict):
             f"{r['price']:,.2f}", f"{r['target']:,.2f}",
             f"+{r['upside_pct']:.1f}%",
             f"[{pc}]{r['prob']:.0f}%[/{pc}]",
-            f"{r['stop']:,.2f}", f"{r['limit']:,.2f}",
+            f"{r['stop']:,.2f}",
             f"{r['reward_risk']:.2f}", str(r["score"]),
             f"[{co_colour}]{co_lbl}[/{co_colour}]",
             f"[{sec_colour}]{sec_lbl}[/{sec_colour}]",
@@ -271,16 +270,17 @@ def print_disclaimer():
         "  Price / Target / Stop / Limit  All in PENCE (divide by 100 for £)\n"
         "  P(rise)      Probability the stock rises at all over the 7-day window\n"
         "               (based on directional accuracy, not target hit rate)\n"
-        "  R:R          Reward:Risk ratio (aim >= 1.5)\n"
+        "  R:R          Reward:Risk ratio\n"
+        "  Stop (p)     Mental stop price -- sell before close if daily close hits this level\n"
         "  Score        Technical score + news adjustment\n"
         "  Co. News     Sentiment of company-specific headlines\n"
         "  Sector News  Sentiment of sector-wide headlines\n"
         "  Invest (£)   Suggested amount -- the primary sizing guide\n\n"
         "[bold]Signal strength labels:[/bold]\n"
-        "  Strong signal    P(rise) >= 58% -- above baseline, favoured\n"
-        "  Moderate signal  P(rise) >= 52%\n"
-        "  Cautious signal  P(rise) >= 46% -- at or near baseline\n"
-        "  Weak signal      P(rise) below floor -- minimal allocation\n\n"
+        "  Strong signal    P(rise) >= 70% -- well above adjusted baseline\n"
+        "  Moderate signal  P(rise) >= 65%\n"
+        "  Cautious signal  P(rise) >= 60% -- at or near adjusted baseline\n"
+        "  Below floor      P(rise) < 60%  -- skip or minimal allocation\n\n"
         "[bold]Probability of rising tiers (signal breakdown):[/bold]\n"
         "  Shows estimated probability of the stock rising by each threshold\n"
         "  based on the historical return distribution from the backtest.\n"
