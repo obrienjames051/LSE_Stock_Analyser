@@ -72,11 +72,13 @@ SECTOR_KEYWORDS = [
     # (short label,  keywords that must appear in the lowercased sector string)
     ("Banking",      ["bank"]),
     ("Insurance",    ["insurance"]),
+    ("RealEstate",   ["real estate", "reit"]),
     ("FinServices",  ["financial service", "investment trust", "collective invest",
                       "equity invest", "general financial", "investment banking",
                       "hedge fund"]),
     ("Pharma",       ["pharma", "biotechnology", "health care", "health care equip",
                       "medical"]),
+    ("Utilities",    ["multiutil", "gas, water", "water util", "util"]),
     ("Energy",       ["oil", "gas", "energy", "coal", "alternative energy",
                       "electrical util", "electricity"]),
     ("Mining",       ["mining", "metal", "precious metal", "basic resource"]),
@@ -99,8 +101,6 @@ SECTOR_KEYWORDS = [
     ("Telecoms",     ["telecom", "mobile telecom"]),
     ("Media",        ["media"]),
     ("Leisure",      ["travel", "leisure", "hospitality"]),
-    ("RealEstate",   ["real estate", "reit", "real estate invest"]),
-    ("Utilities",    ["util", "water", "multiutil", "gas, water"]),
 ]
 
 

@@ -42,6 +42,5 @@ def save_to_csv(picks: list, run_date: str):
                 "outcome_notes":      "",
                 "went_up":            "",  # filled in by calibration on next run
                 "profitable":         "",  # filled in by calibration on next run
-                "pqs":                "",  # filled in by calibration on next run
             })
     console.print(f"[dim]Picks saved to [bold]{CSV_FILE}[/bold][/dim]\n")
