@@ -27,7 +27,6 @@ def save_to_csv(picks: list, run_date: str):
                 "price_p":            r["price"],
                 "target_p":           r["target"],
                 "stop_p":             r["stop"],
-                "limit_p":            r["limit"],
                 "upside_pct":         round(r["upside_pct"], 2),
                 "downside_pct":       round(r["downside_pct"], 2),
                 "prob":               r["prob"],
@@ -41,5 +40,7 @@ def save_to_csv(picks: list, run_date: str):
                 "outcome_hit":        "",
                 "outcome_return_pct": "",
                 "outcome_notes":      "",
+                "went_up":            "",  # filled in by calibration on next run
+                "profitable":         "",  # filled in by calibration on next run
             })
     console.print(f"[dim]Picks saved to [bold]{CSV_FILE}[/bold][/dim]\n")

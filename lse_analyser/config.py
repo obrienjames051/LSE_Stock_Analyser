@@ -15,15 +15,16 @@ LIMIT_BUFFER       = 0.995
 TOP_N              = 5
 MIN_AVG_VOLUME_GBP = 500_000
 
-PROB_FLOOR     = 46.0   # Below baseline directional accuracy -- skip
-KELLY_FRACTION = 0.35   # Increased from 0.25 to compensate for lower prob range
+PROB_FLOOR     = 50.0   # Below random baseline -- model has no edge, skip
+KELLY_FRACTION = 0.35
 
-# Signal strength thresholds -- recalibrated for directional probability range
-# Baseline directional accuracy is ~55%, so thresholds reflect position within
-# the realistic 45-65% range rather than old inflated 50-70% range
-PROB_STRONG    = 58.0   # Strong signal -- above baseline, favoured
-PROB_MODERATE  = 52.0   # Moderate signal
-PROB_CAUTIOUS  = 46.0   # Cautious signal -- at or below baseline
+# Signal strength thresholds relative to backtest directional accuracy of 52.2%.
+# Calibration adjustment shifts the absolute values, but the thresholds are set
+# relative to the actual output range (~48-58% with current -10.5pp adjustment).
+# Review these if the calibration adjustment shifts significantly.
+PROB_STRONG    = 55.0   # Strong signal -- well above baseline
+PROB_MODERATE  = 52.0   # Moderate signal -- above baseline
+PROB_CAUTIOUS  = 50.0   # Cautious signal -- at or near baseline
 
 # Tiered probability thresholds for display
 # Shows probability of rising at each return level based on backtest distribution
@@ -40,10 +41,21 @@ MAX_CALIBRATION_SHIFT     = 15.0
 
 CSV_HEADERS = [
     "run_date", "ticker", "sector", "score", "price_p", "target_p",
-    "stop_p", "limit_p", "upside_pct", "downside_pct", "prob",
+    "stop_p", "upside_pct", "downside_pct", "prob",
     "reward_risk", "atr", "allocated_gbp", "allocation_pct", "shares",
     "signals", "outcome_price_p", "outcome_hit", "outcome_return_pct",
     "outcome_notes",
+    "went_up",      # 1 if monday close > tuesday open (raw directional accuracy)
+    "profitable",   # 1 if actual exit price > entry price (used for calibration)
+]
+
+NEWS_LOG_FILE = "lse_news_log.csv"
+NEWS_LOG_HEADERS = [
+    "run_date", "ticker", "sector",
+    "company_news_score", "company_news_available", "company_headlines",
+    "sector_news_score", "sector_news_available", "sector_headlines",
+    "macro_score", "macro_event", "macro_available",
+    "score_adjustment",
 ]
 
 # ---------------------------------------------------------------------------
@@ -60,11 +72,13 @@ SECTOR_KEYWORDS = [
     # (short label,  keywords that must appear in the lowercased sector string)
     ("Banking",      ["bank"]),
     ("Insurance",    ["insurance"]),
+    ("RealEstate",   ["real estate", "reit"]),
     ("FinServices",  ["financial service", "investment trust", "collective invest",
                       "equity invest", "general financial", "investment banking",
                       "hedge fund"]),
     ("Pharma",       ["pharma", "biotechnology", "health care", "health care equip",
                       "medical"]),
+    ("Utilities",    ["multiutil", "gas, water", "water util", "util"]),
     ("Energy",       ["oil", "gas", "energy", "coal", "alternative energy",
                       "electrical util", "electricity"]),
     ("Mining",       ["mining", "metal", "precious metal", "basic resource"]),
@@ -87,8 +101,6 @@ SECTOR_KEYWORDS = [
     ("Telecoms",     ["telecom", "mobile telecom"]),
     ("Media",        ["media"]),
     ("Leisure",      ["travel", "leisure", "hospitality"]),
-    ("RealEstate",   ["real estate", "reit", "real estate invest"]),
-    ("Utilities",    ["util", "water", "multiutil", "gas, water"]),
 ]
 
 
@@ -301,19 +313,26 @@ SECTOR_SENSITIVITY["general"] = {
 # BACKTESTING
 # ---------------------------------------------------------------------------
 
-BACKTEST_TECHNICAL_CSV  = "lse_backtest_technical.csv"
-BACKTEST_NEWS_CSV       = "lse_backtest_news.csv"
+BACKTEST_TECHNICAL_CSV   = "lse_backtest_technical.csv"
 
-BACKTEST_WEEKS_TECHNICAL = 52   # How many weeks of technical-only history to test
-BACKTEST_WEEKS_NEWS      = 4    # How many weeks of news-enhanced history to test
+BACKTEST_WEEKS_TECHNICAL = 52      # How many weeks of technical-only history to test
 BACKTEST_CAPITAL         = 1000.0  # Arbitrary capital for Kelly sizing in backtest
                                    # Actual amount irrelevant -- only pct return used
+
+# Baseline return confirmed from backtesting research (see RESEARCH.md)
+# Window: Tuesday open -> Monday close, stops only, no limits, 51 weeks
+BACKTEST_BASELINE_RETURN = 0.760   # % per pick per week
 
 # Calibration weights for each data source
 # Live picks are always 1.0 (the reference point)
 CALIBRATION_WEIGHT_LIVE      = 1.0
 CALIBRATION_WEIGHT_TECHNICAL = 0.6   # Historical but news-blind
-CALIBRATION_WEIGHT_NEWS      = 0.3   # Full model but news not truly historical
 
 # Once this many live picks are resolved, backtest data is phased out entirely
 CALIBRATION_LIVE_THRESHOLD   = 30
+
+# Fixed end date for all backtests -- ensures every script uses the same
+# 52-week window regardless of what day it is run. Set to the Monday of
+# the week the original Phase 1 backtest was completed.
+# To extend the backtest window, update this date to the current Monday.
+BACKTEST_END_DATE = "2026-03-02"  # Monday 2 March 2026

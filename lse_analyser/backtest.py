@@ -3,30 +3,24 @@ backtest.py
 -----------
 Backtesting engine for the LSE Analyser.
 
-Runs two phases of historical simulation to bootstrap the calibration
-system without waiting weeks for live picks to accumulate:
+Simulates historical weekly runs using technical scoring on historical price
+data. News/macro sentiment is excluded because historical article data is not
+reliably available.
 
-Phase 1 -- Technical backtest (default: 52 weeks)
-  Simulates weekly runs using only technical scoring on historical price
-  data. News/macro sentiment is excluded because historical article data
-  is not reliably available. Results stored in lse_backtest_technical.csv.
-  Calibration weight: 0.6 (genuinely historical but news-blind)
+Strategy modelled (confirmed in RESEARCH.md):
+  - Programme is run on Tuesday morning before market open
+  - Data available: up to and including Monday close
+  - Entry price: Tuesday open
+  - Stop price:  Monday close - 1x ATR  (known before Tuesday open)
+  - Stop check:  daily close, Tuesday through Friday
+                 If any close <= stop price, exit at that close
+  - Normal exit: Monday close of following week
+  - No upper limits
 
-Phase 2 -- News-enhanced backtest (default: 4 weeks)
-  Reruns the last 4 weeks with company, sector, and macro news included.
-  Uses NewsAPI with a date filter, but note that the articles returned
-  reflect today's index filtered by date -- not a true reconstruction of
-  what was available at that exact point in time. Results stored in
-  lse_backtest_news.csv. Calibration weight: 0.3 (full model but
-  news data is approximate)
-
-Both CSV files use the same column structure as lse_screener_log.csv so
-the calibration engine can read all three sources consistently.
-
-The backtest is designed to be run once or twice to bootstrap calibration,
-then left alone as live picks accumulate. Once CALIBRATION_LIVE_THRESHOLD
-live picks are resolved, the calibration engine phases out backtest data
-automatically.
+Results are saved to lse_backtest_technical.csv. The calibration engine
+reads this file to bootstrap probability correction before live picks
+accumulate. Once CALIBRATION_LIVE_THRESHOLD live picks are resolved,
+backtest data is phased out automatically.
 """
 
 import csv
@@ -38,16 +32,13 @@ import yfinance as yf
 
 from .config import (
     TOP_N, CSV_HEADERS,
-    BACKTEST_TECHNICAL_CSV, BACKTEST_NEWS_CSV,
-    BACKTEST_WEEKS_TECHNICAL, BACKTEST_WEEKS_NEWS, BACKTEST_CAPITAL,
+    BACKTEST_TECHNICAL_CSV,
+    BACKTEST_WEEKS_TECHNICAL, BACKTEST_CAPITAL,
+    ATR_MULTIPLIER, STOP_MULTIPLIER,
 )
 from .utils import console, silent
 from .tickers import get_tickers
 from .screener import diversify
-from .news import fetch_news_sentiment, apply_news_adjustment
-from .macro import (
-    fetch_macro_sentiment, fetch_sector_sentiment, apply_macro_to_pick,
-)
 from .sizing import calculate_allocations
 
 
@@ -56,15 +47,20 @@ from .sizing import calculate_allocations
 def run_backtest():
     """
     Entry point for backtest mode.
-    Runs Phase 1 (technical) then Phase 2 (news-enhanced) and saves results.
+    Runs Phase 1 (technical only, Tuesday open -> Monday close) and saves results.
     """
     console.rule("[bold cyan]Backtest Mode[/bold cyan]")
     console.print(
         "\n[dim]This will simulate historical weekly runs to bootstrap the\n"
-        "calibration system. Phase 1 covers the last 52 weeks using technical\n"
-        "analysis only. Phase 2 covers the last 4 weeks with news sentiment\n"
-        "included (approximate -- see README for limitations).\n\n"
-        "This may take 10-20 minutes to complete.[/dim]\n"
+        "calibration system. It covers approximately 52 weeks using technical\n"
+        "analysis only, with the confirmed strategy:\n\n"
+        "  Entry:  Tuesday open\n"
+        "  Exit:   Monday close (following week)\n"
+        "  Stop:   Monday close - 1x ATR, checked each close Tue-Fri\n"
+        "  Limits: None\n\n"
+        "News/macro sentiment is excluded from the backtest because\n"
+        "historical article data is not reliably available.\n\n"
+        "This may take 10-15 minutes to complete.[/dim]\n"
     )
 
     confirm = input("  Press Enter to start, or type 'skip' to cancel: ").strip().lower()
@@ -76,63 +72,43 @@ def run_backtest():
     source  = getattr(get_tickers, "_source", f"{len(tickers)} stocks")
     console.print(f"[dim]Ticker universe: {source}[/dim]\n")
 
-    # Phase 1: technical-only backtest
-    console.rule("[bold]Phase 1 — Technical Backtest (52 weeks)[/bold]")
-    phase1_results = _run_technical_backtest(tickers, BACKTEST_WEEKS_TECHNICAL)
-    _save_backtest_results(phase1_results, BACKTEST_TECHNICAL_CSV)
+    console.rule("[bold]Phase 1 — Technical Backtest[/bold]")
+    results = _run_technical_backtest(tickers, BACKTEST_WEEKS_TECHNICAL)
+    _save_backtest_results(results, BACKTEST_TECHNICAL_CSV)
     console.print(
-        f"[green]Phase 1 complete.[/green] "
-        f"{len(phase1_results)} simulated picks saved to {BACKTEST_TECHNICAL_CSV}\n"
+        f"[green]Backtest complete.[/green] "
+        f"{len(results)} simulated picks saved to {BACKTEST_TECHNICAL_CSV}\n"
     )
 
-    # Phase 2: news-enhanced backtest
-    console.rule("[bold]Phase 2 — News-Enhanced Backtest (4 weeks)[/bold]")
-    console.print(
-        "[dim]Note: NewsAPI articles are filtered by date but reflect today's\n"
-        "index -- not a perfect reconstruction of historical news.[/dim]\n"
-    )
-    phase2_results = _run_news_backtest(tickers, BACKTEST_WEEKS_NEWS)
-    _save_backtest_results(phase2_results, BACKTEST_NEWS_CSV)
-    console.print(
-        f"[green]Phase 2 complete.[/green] "
-        f"{len(phase2_results)} simulated picks saved to {BACKTEST_NEWS_CSV}\n"
-    )
-
-    # Print summary
-    _print_backtest_summary(phase1_results, phase2_results)
+    _print_backtest_summary(results)
 
 
 # ── Phase 1: technical backtest ───────────────────────────────────────────────
 
 def _run_technical_backtest(tickers: dict, n_weeks: int) -> list:
     """
-    Simulate n_weeks of weekly technical-only picks on historical data.
-    Returns a list of result dicts with outcome columns filled in.
+    Simulate n_weeks of weekly picks on historical data.
+    Each week: score on Monday close data, enter Tuesday open, exit Monday close.
     """
     all_results = []
-    now         = datetime.now()
+    from .config import BACKTEST_END_DATE
+    end_monday = datetime.strptime(BACKTEST_END_DATE, "%Y-%m-%d")
 
-    # Download full price history for all tickers once upfront
-    # to avoid hundreds of individual API calls
     console.print("[dim]Downloading historical price data (this may take a few minutes)...[/dim]")
     price_data = _download_all_prices(tickers)
     console.print(f"[dim]Price data downloaded for {len(price_data)} tickers.[/dim]\n")
 
     for week_offset in range(n_weeks, 0, -1):
-        sim_date    = now - timedelta(weeks=week_offset)
-        outcome_date = sim_date + timedelta(days=7)
+        sim_monday    = end_monday - timedelta(weeks=week_offset)
+        entry_tuesday = sim_monday + timedelta(days=1)
+        exit_monday   = sim_monday + timedelta(days=8)
 
-        # Skip if outcome date is in the future
-        if outcome_date > now:
+        if exit_monday > end_monday:
             continue
 
-        sim_date_str = sim_date.strftime("%Y-%m-%d")
-        console.print(f"  [dim]Simulating week of {sim_date_str}...[/dim]", end="\r")
+        console.print(f"  [dim]Simulating week of {sim_monday.strftime('%Y-%m-%d')}...[/dim]", end="\r")
 
-        week_picks = _score_week_technical(
-            tickers, price_data, sim_date, outcome_date
-        )
-
+        week_picks = _score_week(tickers, price_data, sim_monday, entry_tuesday, exit_monday)
         if week_picks:
             all_results.extend(week_picks)
 
@@ -140,35 +116,29 @@ def _run_technical_backtest(tickers: dict, n_weeks: int) -> list:
     return all_results
 
 
-def _score_week_technical(
-    tickers: dict, price_data: dict, sim_date: datetime, outcome_date: datetime
-) -> list:
+def _score_week(tickers, price_data, sim_monday, entry_tuesday, exit_monday):
     """
-    Score all tickers as of sim_date using technical indicators only.
-    Returns the top TOP_N diversified picks with outcomes filled in.
+    Score all tickers using data up to sim_monday close.
+    Enter at entry_tuesday open, check stops daily, exit at exit_monday close.
     """
-    from .config import ATR_MULTIPLIER, STOP_MULTIPLIER, LIMIT_BUFFER
-    import numpy as np
-
-    results = []
-    sim_date_pd = pd.Timestamp(sim_date)
+    results       = []
+    sim_monday_pd = pd.Timestamp(sim_monday)
 
     for ticker, sector in tickers.items():
+        # Tickers already include .L suffix in the universe dict
         df = price_data.get(ticker)
         if df is None or len(df) < 30:
             continue
 
-        # Slice data to only what was available at sim_date
         try:
-            hist = df[df.index <= sim_date_pd].copy()
+            hist = df[df.index <= sim_monday_pd].copy()
         except Exception:
             continue
-
         if len(hist) < 30:
             continue
 
         try:
-            r = _score_historical(ticker, sector, hist, ATR_MULTIPLIER, STOP_MULTIPLIER, LIMIT_BUFFER)
+            r = _score_historical(ticker, sector, hist)
             if r:
                 results.append(r)
         except Exception:
@@ -180,51 +150,105 @@ def _score_week_technical(
     results.sort(key=lambda x: x["score"], reverse=True)
     top = diversify(results, TOP_N)
 
-    # Fill in outcomes
-    outcome_date_pd = pd.Timestamp(outcome_date)
+    entry_tuesday_pd = pd.Timestamp(entry_tuesday)
+    exit_monday_pd   = pd.Timestamp(exit_monday)
+
+    resolved = []
     for r in top:
-        ticker_key = r["ticker"] + ".L"
-        df = price_data.get(ticker_key)
+        df = price_data.get(r["ticker"] + ".L")
         if df is None:
             df = price_data.get(r["ticker"])
         if df is None:
             continue
         try:
-            future = df[df.index > sim_date_pd]
-            if future.empty:
-                continue
-            # Find closest available price to outcome_date
-            closest = future[future.index <= outcome_date_pd]
-            if closest.empty:
-                closest = future.head(1)
-            outcome_price = float(closest["close"].iloc[-1])
-            entry_price   = r["price"]
-            target_price  = r["target"]
-            return_pct    = (outcome_price - entry_price) / entry_price * 100
-            hit           = "YES" if outcome_price >= target_price else "NO"
-
-            r["outcome_price_p"]    = round(outcome_price, 2)
-            r["outcome_hit"]        = hit
-            r["outcome_return_pct"] = round(return_pct, 2)
-            r["outcome_notes"]      = (
-                f"Backtest: {'Target reached' if hit == 'YES' else 'Target missed'}. "
-                f"{return_pct:+.1f}%"
-            )
-            r["run_date"] = sim_date.strftime("%Y-%m-%d %H:%M")
+            outcome = _simulate_trade(df, r, entry_tuesday_pd, exit_monday_pd)
+            if outcome:
+                r.update(outcome)
+                r["run_date"] = sim_monday.strftime("%Y-%m-%d %H:%M")
+                resolved.append(r)
         except Exception:
             continue
 
-    # Apply Kelly sizing so allocation_pct is stored for weighted return calc
-    resolved = [r for r in top if r.get("outcome_hit")]
     if resolved:
         calculate_allocations(resolved, BACKTEST_CAPITAL)
     return resolved
 
 
-def _score_historical(ticker, sector, hist, atr_mult, stop_mult, limit_buf):
+def _simulate_trade(df, r, entry_tuesday_pd, exit_monday_pd):
+    """
+    Simulate the trade:
+      - Entry at Tuesday open
+      - Stop = entry_price - 1x ATR (recalculated from Monday close data in r)
+      - Check each close Tuesday through Friday; exit if close <= stop
+      - Otherwise exit at Monday close
+    Returns outcome dict or None if data unavailable.
+    """
+    tuesday_bars = df[df.index >= entry_tuesday_pd]
+    if tuesday_bars.empty:
+        return None
+
+    entry_bar   = tuesday_bars.iloc[0]
+    entry_price = float(entry_bar["open"])
+    if entry_price <= 0:
+        return None
+
+    # Stop was calculated from Monday close data
+    stop_price = r["stop"]
+
+    window_bars = df[
+        (df.index >= entry_tuesday_pd) & (df.index <= exit_monday_pd)
+    ]
+    if window_bars.empty:
+        return None
+
+    exit_price  = None
+    exit_reason = None
+
+    monday_close = float(window_bars["close"].iloc[-1])
+
+    for idx, bar in window_bars.iterrows():
+        day_close = float(bar["close"])
+
+        if idx == window_bars.index[-1]:
+            exit_price  = day_close
+            exit_reason = "window_end"
+            break
+
+        if day_close <= stop_price:
+            exit_price  = day_close
+            exit_reason = "stop"
+            break
+
+    if exit_price is None:
+        return None
+
+    return_pct = (exit_price - entry_price) / entry_price * 100
+    target_hit = "YES" if monday_close >= r["target"] else "NO"
+
+    # went_up: did Monday close exceed entry? (raw directional accuracy -- display only)
+    went_up = 1 if monday_close > entry_price else 0
+
+    # profitable: did the actual exit price exceed entry? (used for calibration)
+    # Accounts for stop-outs: a stock that recovered by Monday but was stopped
+    # out at a loss correctly counts as unprofitable.
+    profitable = 1 if exit_price > entry_price else 0
+
+    return {
+        "outcome_price_p":    round(exit_price, 2),
+        "outcome_hit":        target_hit,
+        "outcome_return_pct": round(return_pct, 2),
+        "outcome_notes": (
+            f"Backtest: {'Stop triggered' if exit_reason == 'stop' else 'Held to Monday close'}. "
+            f"{return_pct:+.1f}%"
+        ),
+        "went_up":    went_up,
+        "profitable": profitable,
+    }
+
+
+def _score_historical(ticker, sector, hist):
     """
     Compute technical score for a ticker using a historical price slice.
-    Mirrors score_ticker() in screener.py but works on a pre-sliced dataframe.
     """
     from ta.momentum import RSIIndicator, StochasticOscillator
     from ta.trend import MACD, EMAIndicator, SMAIndicator
@@ -233,7 +257,6 @@ def _score_historical(ticker, sector, hist, atr_mult, stop_mult, limit_buf):
 
     close, high, low, vol = hist["close"], hist["high"], hist["low"], hist["volume"]
 
-    # Volume filter
     recent        = hist.tail(20)
     avg_value_gbp = (recent["close"] * recent["volume"] / 100).mean()
     from .config import MIN_AVG_VOLUME_GBP
@@ -254,26 +277,26 @@ def _score_historical(ticker, sector, hist, atr_mult, stop_mult, limit_buf):
     stoch_k   = stoch.stoch()
     stoch_d   = stoch.stoch_signal()
 
-    c        = float(close.iloc[-1])
-    r        = float(rsi.iloc[-1])
-    mh       = float(macd_hist.iloc[-1])
-    mh_p     = float(macd_hist.iloc[-2])
-    bp       = float(bb_pct.iloc[-1])
-    e20      = float(ema20.iloc[-1])
-    e50      = float(ema50.iloc[-1])
-    s200     = float(sma200.iloc[-1])
-    atr_v    = float(atr.iloc[-1])
-    sk       = float(stoch_k.iloc[-1])
-    sd       = float(stoch_d.iloc[-1])
+    c         = float(close.iloc[-1])
+    r_val     = float(rsi.iloc[-1])
+    mh        = float(macd_hist.iloc[-1])
+    mh_p      = float(macd_hist.iloc[-2])
+    bp        = float(bb_pct.iloc[-1])
+    e20       = float(ema20.iloc[-1])
+    e50       = float(ema50.iloc[-1])
+    s200      = float(sma200.iloc[-1])
+    atr_v     = float(atr.iloc[-1])
+    sk        = float(stoch_k.iloc[-1])
+    sd        = float(stoch_d.iloc[-1])
     obv_slope = (float(obv.iloc[-1]) - float(obv.iloc[-10])) / (abs(float(obv.iloc[-10])) + 1)
-    mom5     = (c - float(close.iloc[-6])) / float(close.iloc[-6]) * 100
+    mom5      = (c - float(close.iloc[-6])) / float(close.iloc[-6]) * 100
 
     score, signals = 0, []
 
-    if 40 <= r <= 65:
-        score += 20; signals.append(f"RSI {r:.0f}")
-    elif r < 35:
-        score += 10; signals.append(f"RSI {r:.0f} oversold")
+    if 40 <= r_val <= 65:
+        score += 20; signals.append(f"RSI {r_val:.0f}")
+    elif r_val < 35:
+        score += 10; signals.append(f"RSI {r_val:.0f} oversold")
 
     if mh > 0 and mh_p < 0:
         score += 25; signals.append("MACD bullish crossover")
@@ -301,155 +324,48 @@ def _score_historical(ticker, sector, hist, atr_mult, stop_mult, limit_buf):
     elif -1.0 <= mom5 < 0:
         score += 5; signals.append(f"Mom {mom5:.1f}%")
 
-    target       = round(c + atr_mult * atr_v, 2)
-    stop         = round(c - stop_mult * atr_v, 2)
-    limit        = round(target * limit_buf, 2)
+    target       = round(c + ATR_MULTIPLIER * atr_v, 2)
+    stop         = round(c - STOP_MULTIPLIER * atr_v, 2)
     upside_pct   = (target - c) / c * 100
     downside_pct = (c - stop) / c * 100
     prob         = round(min(68.0, max(45.0, 45.0 + (score / 110) * 23.0)), 1)
 
     return {
-        "ticker":       ticker.replace(".L", ""),
-        "sector":       sector,
-        "score":        score,
-        "price":        c,
-        "target":       target,
-        "stop":         stop,
-        "limit":        limit,
-        "upside_pct":   upside_pct,
-        "downside_pct": downside_pct,
-        "prob":         prob,
-        "signals":      signals,
-        "atr":          round(atr_v, 4),
-        "reward_risk":  round(upside_pct / downside_pct, 2) if downside_pct > 0 else 0,
-        "allocated_gbp": "",
-        "shares":        "",
+        "ticker":             ticker.replace(".L", ""),
+        "sector":             sector,
+        "score":              score,
+        "price":              c,
+        "target":             target,
+        "stop":               stop,
+        "upside_pct":         upside_pct,
+        "downside_pct":       downside_pct,
+        "prob":               prob,
+        "signals":            signals,
+        "atr":                round(atr_v, 4),
+        "reward_risk":        round(upside_pct / downside_pct, 2) if downside_pct > 0 else 0,
+        "allocated_gbp":      "",
+        "shares":             "",
         "outcome_price_p":    "",
         "outcome_hit":        "",
         "outcome_return_pct": "",
         "outcome_notes":      "",
+        "went_up":            "",
+        "profitable":         "",
         "run_date":           "",
     }
-
-
-# ── Phase 2: news-enhanced backtest ──────────────────────────────────────────
-
-def _run_news_backtest(tickers: dict, n_weeks: int) -> list:
-    """
-    Simulate the last n_weeks of weekly runs with news sentiment included.
-    Uses the same technical scoring as Phase 1, then adds news/macro layers.
-    """
-    price_data  = _download_all_prices(tickers, period="200d")
-    all_results = []
-    now         = datetime.now()
-
-    for week_offset in range(n_weeks, 0, -1):
-        sim_date     = now - timedelta(weeks=week_offset)
-        outcome_date = sim_date + timedelta(days=7)
-
-        if outcome_date > now:
-            continue
-
-        sim_date_str = sim_date.strftime("%Y-%m-%d")
-        console.print(f"  [dim]Simulating week of {sim_date_str} (with news)...[/dim]")
-
-        # Technical scoring
-        results = []
-        sim_date_pd = pd.Timestamp(sim_date)
-        from .config import ATR_MULTIPLIER, STOP_MULTIPLIER, LIMIT_BUFFER
-
-        for ticker, sector in tickers.items():
-            df = price_data.get(ticker)
-            if df is None or len(df) < 30:
-                continue
-            try:
-                hist = df[df.index <= sim_date_pd].copy()
-                if len(hist) < 30:
-                    continue
-                r = _score_historical(
-                    ticker, sector, hist, ATR_MULTIPLIER, STOP_MULTIPLIER, LIMIT_BUFFER
-                )
-                if r:
-                    results.append(r)
-            except Exception:
-                continue
-
-        if not results:
-            continue
-
-        results.sort(key=lambda x: x["score"], reverse=True)
-        candidates = results[:20]
-
-        # Company news
-        with console.status("[dim]Fetching company news...[/dim]"):
-            for r in candidates:
-                sentiment = fetch_news_sentiment(r["ticker"] + ".L")
-                apply_news_adjustment(r, sentiment)
-
-        # Macro + sector news
-        macro        = fetch_macro_sentiment()
-        sector_cache = {}
-        for r in candidates:
-            sector = r["sector"]
-            if sector not in sector_cache:
-                sector_cache[sector] = fetch_sector_sentiment(sector)
-            apply_macro_to_pick(r, macro, sector_cache[sector])
-
-        candidates.sort(key=lambda x: x["score"], reverse=True)
-        top = diversify(candidates, TOP_N)
-
-        # Fill outcomes
-        outcome_date_pd = pd.Timestamp(outcome_date)
-        for r in top:
-            ticker_key = r["ticker"] + ".L"
-            df = price_data.get(ticker_key)
-            if df is None:
-                df = price_data.get(r["ticker"])
-            if df is None:
-                continue
-            try:
-                future  = df[df.index > sim_date_pd]
-                if future.empty:
-                    continue
-                closest = future[future.index <= outcome_date_pd]
-                if closest.empty:
-                    closest = future.head(1)
-                outcome_price = float(closest["close"].iloc[-1])
-                entry_price   = r["price"]
-                return_pct    = (outcome_price - entry_price) / entry_price * 100
-                hit           = "YES" if outcome_price >= r["target"] else "NO"
-
-                r["outcome_price_p"]    = round(outcome_price, 2)
-                r["outcome_hit"]        = hit
-                r["outcome_return_pct"] = round(return_pct, 2)
-                r["outcome_notes"]      = (
-                    f"Backtest+news: {'Target reached' if hit == 'YES' else 'Target missed'}. "
-                    f"{return_pct:+.1f}%"
-                )
-                r["run_date"] = sim_date.strftime("%Y-%m-%d %H:%M")
-            except Exception:
-                continue
-
-        resolved_week = [r for r in top if r.get("outcome_hit")]
-        if resolved_week:
-            calculate_allocations(resolved_week, BACKTEST_CAPITAL)
-        all_results.extend(resolved_week)
-
-    return all_results
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
 
 def _download_all_prices(tickers: dict, period: str = "400d") -> dict:
+    """Batch download price history for all tickers.
+    Tickers in the universe already include .L suffix (e.g. III.L) -- do not add it again.
+    Price data is stored keyed by the ticker as-is.
     """
-    Batch download price history for all tickers.
-    Returns dict of {ticker: DataFrame}.
-    """
-    price_data = {}
+    price_data  = {}
     ticker_list = list(tickers.keys())
+    batch_size  = 50
 
-    # Download in batches of 50 to avoid yfinance timeouts
-    batch_size = 50
     for i in range(0, len(ticker_list), batch_size):
         batch = ticker_list[i:i+batch_size]
         try:
@@ -497,7 +413,6 @@ def _save_backtest_results(results: list, filepath: str):
                 "price_p":            r.get("price", ""),
                 "target_p":           r.get("target", ""),
                 "stop_p":             r.get("stop", ""),
-                "limit_p":            r.get("limit", ""),
                 "upside_pct":         round(r["upside_pct"], 2) if r.get("upside_pct") else "",
                 "downside_pct":       round(r["downside_pct"], 2) if r.get("downside_pct") else "",
                 "prob":               r.get("prob", ""),
@@ -511,38 +426,48 @@ def _save_backtest_results(results: list, filepath: str):
                 "outcome_hit":        r.get("outcome_hit", ""),
                 "outcome_return_pct": r.get("outcome_return_pct", ""),
                 "outcome_notes":      r.get("outcome_notes", ""),
+                "went_up":            r.get("went_up", ""),
+                "profitable":         r.get("profitable", ""),
             })
 
 
-def _print_backtest_summary(phase1: list, phase2: list):
+def _print_backtest_summary(results: list):
     """Print a summary of backtest results."""
     from rich.panel import Panel
     from rich import box
 
-    def _stats(results, label):
-        resolved = [r for r in results if r.get("outcome_hit") in ("YES", "NO")]
-        if not resolved:
-            return f"  {label}: no resolved picks"
-        hits      = sum(1 for r in resolved if r["outcome_hit"] == "YES")
-        hit_rate  = hits / len(resolved) * 100
-        returns   = [float(r["outcome_return_pct"]) for r in resolved if r.get("outcome_return_pct") != ""]
-        avg_ret   = sum(returns) / len(returns) if returns else 0
-        hc = "bright_green" if hit_rate >= 50 else "yellow" if hit_rate >= 35 else "red"
-        rc = "bright_green" if avg_ret >= 0 else "red"
-        return (
-            f"  {label}: [{hc}]{hit_rate:.1f}% hit rate[/{hc}]  |  "
-            f"[{rc}]{avg_ret:+.2f}% avg return[/{rc}]  |  "
-            f"{len(resolved)} picks"
-        )
+    resolved = [r for r in results if r.get("outcome_hit") in ("YES", "NO")]
+    if not resolved:
+        console.print("[yellow]No resolved picks to summarise.[/yellow]")
+        return
+
+    hits       = sum(1 for r in resolved if r["outcome_hit"] == "YES")
+    hit_rate   = hits / len(resolved) * 100
+    returns    = [float(r["outcome_return_pct"]) for r in resolved if r.get("outcome_return_pct") != ""]
+    avg_ret    = sum(returns) / len(returns) if returns else 0
+    went_up    = sum(1 for r in resolved if str(r.get("went_up", "")) == "1")
+    profitable = sum(1 for r in resolved if str(r.get("profitable", "")) == "1")
+    dir_acc    = went_up / len(resolved) * 100
+    prof_rate  = profitable / len(resolved) * 100
+    stops      = sum(1 for r in resolved if "Stop" in str(r.get("outcome_notes", "")))
+
+    hc  = "bright_green" if hit_rate >= 50 else "yellow"
+    rc  = "bright_green" if avg_ret >= 0 else "red"
+    dc  = "bright_green" if dir_acc >= 55 else "yellow"
+    pc  = "bright_green" if prof_rate >= 52 else "yellow"
 
     console.print(Panel(
         f"[bold]Backtest Complete[/bold]\n\n"
-        f"{_stats(phase1, 'Phase 1 (technical)')}\n"
-        f"{_stats(phase2, 'Phase 2 (news-enhanced)')}\n\n"
-        f"[dim]Results saved to {BACKTEST_TECHNICAL_CSV} and {BACKTEST_NEWS_CSV}.\n"
+        f"  Total picks:          {len(resolved)}\n"
+        f"  Avg return:           [{rc}]{avg_ret:+.3f}%[/{rc}] per pick\n"
+        f"  Target hit rate:      [{hc}]{hit_rate:.1f}%[/{hc}]  ({hits}/{len(resolved)})\n"
+        f"  Directional accuracy: [{dc}]{dir_acc:.1f}%[/{dc}]  (Mon close > Tue open)\n"
+        f"  Profitable trades:    [{pc}]{prof_rate:.1f}%[/{pc}]  (exit price > entry)\n"
+        f"  Stop-outs:            {stops} ({stops/len(resolved)*100:.1f}%)\n\n"
+        f"[dim]Results saved to {BACKTEST_TECHNICAL_CSV}.\n"
         f"The calibration engine will incorporate these on the next run.\n"
-        f"Backtest data will be phased out automatically once you have\n"
-        f"enough live picks.[/dim]",
+        f"Backtest data is phased out automatically once you have\n"
+        f"30 or more resolved live picks.[/dim]",
         title="Backtest Summary",
         box=box.ROUNDED,
     ))

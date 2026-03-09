@@ -17,7 +17,7 @@ from .config import (
 )
 from .utils import console
 from .tickers import get_tickers
-from .screener import score_ticker, has_event_in_window, diversify
+from .screener import score_ticker, has_event_in_window, diversify, finalise_prob_tiers
 from .calibration import resolve_pending_outcomes, compute_calibration, print_performance_report
 from .sizing import calculate_allocations, ask_for_capital
 from .csv_log import save_to_csv
@@ -28,6 +28,7 @@ from .display import (
 from .history import show_history
 from .spotlight import run_spotlight
 from .backtest import run_backtest
+from .news_log import log_news
 from .news import fetch_news_sentiment, apply_news_adjustment
 from .macro import (
     fetch_macro_sentiment, fetch_sector_sentiment,
@@ -268,7 +269,7 @@ def main():
     mode_label = "[green]LIVE[/green]" if live_mode else "[yellow]PREVIEW[/yellow]"
 
     console.print(Panel(
-        f"[bold cyan]LSE Stock Screener  v5.1[/bold cyan]\n"
+        f"[bold cyan]LSE Stock Screener  v8.0[/bold cyan]\n"
         f"[dim]Run at {run_date}[/dim]  --  Mode: {mode_label}\n\n"
         "[dim]Features:  Volume filter  |  Sector diversification  |  Event filter\n"
         "          Company news  |  Macro & sector sentiment  |  "
@@ -334,6 +335,9 @@ def main():
     )
     top, sector_cache = _select_picks(all_results, macro)
 
+    # Finalise prob_tiers using the fully adjusted probability
+    finalise_prob_tiers(top)
+
     # Step 7: print macro warning if needed (after picks are shown in context)
     _print_macro_warning(macro, warning_level)
 
@@ -350,6 +354,7 @@ def main():
     # Step 10: save or notify
     if live_mode:
         save_to_csv(top, run_date)
+        log_news(top, run_date, macro, sector_cache)
     else:
         console.print(
             "[yellow]Preview mode -- results not saved to CSV.[/yellow]\n"
