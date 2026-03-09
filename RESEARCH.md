@@ -159,6 +159,34 @@ A critical early discovery was that the original backtest used a single Friday s
 
 ---
 
+### 8. Sector Diversification Rule
+**Script**: `backtest_sector_diversification.py`  
+**Purpose**: Determine whether relaxing the 1-pick-per-sector rule improves returns by allowing the model to select multiple highly-scored picks from the same sector.  
+**Setup**: Window 2 (Tuesday open → Monday close), 1.0× ATR stops, 52 weeks, 255 picks per strategy.
+
+| Metric | A: Max 1/sector | B: Max 2/sector | C: No limit |
+|--------|----------------|----------------|-------------|
+| Avg return / pick | **+0.740%** | +0.540% | +0.363% |
+| Profitable trades | **52.5%** | 50.6% | 48.6% |
+| Directional accuracy | **54.9%** | 54.5% | 52.9% |
+| Target hit rate | 29.8% | **30.2%** | 27.8% |
+| Stop-out rate | **21.2%** | 23.5% | 25.1% |
+| Best week | 11.05% | 11.05% | 11.05% |
+| Worst week | −4.86% | **−4.54%** | **−4.54%** |
+| Std dev (picks) | 4.348% | 4.046% | **4.020%** |
+| Std dev (weekly) | 2.625% | **2.530%** | 2.570% |
+| Top sector concentration | **18.0%** | 30.2% | 34.9% |
+
+**Finding**: The current 1-per-sector rule produces the highest average return by a significant margin (+0.74% vs +0.54% vs +0.36%), despite having the highest sector std dev and worst single-week loss.
+
+**Finding**: Relaxing the sector limit increases stop-out rate. When the model scores multiple stocks highly within one sector, those signals are partially correlated — the same sector momentum is being counted multiple times. Forcing diversification selects stocks with more independent signals, which hold up better mid-week.
+
+**Finding**: The improvement in worst-week from A to B/C (−4.86% vs −4.54%) is modest (+0.32pp) and does not justify sacrificing 0.20pp of average weekly return.
+
+**Decision**: Keep the current `max 1 per sector` rule. The diversification constraint is not just a risk management nicety — it actively improves returns by forcing the model to find genuinely independent signals across sectors.
+
+---
+
 ## Things Tested and Rejected
 
 | Feature | Reason Rejected |
@@ -170,6 +198,7 @@ A critical early discovery was that the original backtest used a single Friday s
 | Holding over weekend | Weekend gap-down effect costs ~0.4pp per occurrence |
 | Selling at next open after stop triggers | Worse than same-day close execution |
 | Gap-up recovery hold (sell next open only if still below stop) | Worse than method 2; gap recoveries don't add value |
+| Relaxed sector limit (max 2/sector or no limit) | Increases stop-out rate and reduces avg return — correlated signals within sectors inflate apparent score quality |
 
 ---
 
