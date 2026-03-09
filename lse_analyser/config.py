@@ -14,6 +14,9 @@ STOP_MULTIPLIER    = 1.0
 LIMIT_BUFFER       = 0.995
 TOP_N              = 5
 MIN_AVG_VOLUME_GBP = 500_000
+SCORE_CAP          = 85    # Picks scoring >= this are excluded (confirmed Strategy E, RESEARCH.md §15)
+                           # Scores only exist at multiples of 5; cap at 85 excludes scores 85, 90, 95, 100+
+                           # Effective score range for selected picks: 55–84
 
 PROB_FLOOR     = 50.0   # Below random baseline -- model has no edge, skip
 KELLY_FRACTION = 0.35
@@ -321,7 +324,7 @@ BACKTEST_CAPITAL         = 1000.0  # Arbitrary capital for Kelly sizing in backt
 
 # Baseline return confirmed from backtesting research (see RESEARCH.md)
 # Window: Tuesday open -> Monday close, stops only, no limits, 51 weeks
-BACKTEST_BASELINE_RETURN = 0.760   # % per pick per week
+BACKTEST_BASELINE_RETURN = 1.1188   # % per pick per week -- auto-updated by backtest
 
 # Calibration weights for each data source
 # Live picks are always 1.0 (the reference point)

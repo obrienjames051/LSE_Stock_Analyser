@@ -269,7 +269,7 @@ def main():
     mode_label = "[green]LIVE[/green]" if live_mode else "[yellow]PREVIEW[/yellow]"
 
     console.print(Panel(
-        f"[bold cyan]LSE Stock Screener  v8.0[/bold cyan]\n"
+        f"[bold cyan]LSE Stock Screener  v9.0[/bold cyan]\n"
         f"[dim]Run at {run_date}[/dim]  --  Mode: {mode_label}\n\n"
         "[dim]Features:  Volume filter  |  Sector diversification  |  Event filter\n"
         "          Company news  |  Macro & sector sentiment  |  "
@@ -351,14 +351,18 @@ def main():
     print_signal_breakdown(top, skipped_events)
     print_macro_table(macro, sector_cache, top)
 
-    # Step 10: save or notify
+    # Step 10: save picks (live only) and news (always)
+    # News is logged in both modes so that preview runs throughout the week
+    # accumulate sentiment data for future research, independent of trade logging.
+    log_news(top, run_date, macro, sector_cache)
+
     if live_mode:
         save_to_csv(top, run_date)
-        log_news(top, run_date, macro, sector_cache)
     else:
         console.print(
-            "[yellow]Preview mode -- results not saved to CSV.[/yellow]\n"
-            "[dim]Run in Live mode (L) to log this week's picks.[/dim]\n"
+            "[yellow]Preview mode -- picks not saved to CSV.[/yellow]\n"
+            "[dim]News sentiment saved to lse_news_log.csv.  "
+            "Run in Live mode (L) to log this week's picks.[/dim]\n"
         )
 
     print_disclaimer()

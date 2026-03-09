@@ -11,8 +11,13 @@ from .utils import console
 def signal_label(prob: float) -> str:
     """
     Return a signal strength label based on the recalibrated directional
-    probability thresholds. Thresholds reflect position within the realistic
-    45-68% directional probability range rather than old inflated values.
+    probability thresholds.
+
+    With the score cap at 85, selected picks score 55-84, producing raw probs
+    of 60-68% before calibration adjustment. The calibration system then shifts
+    these to reflect actual live performance. Labels are based on the final
+    calibrated prob and do not penalise lower-scoring picks that the research
+    has shown to outperform higher-scoring ones (RESEARCH.md §9, §15).
     """
     if prob >= PROB_STRONG:
         return "Strong signal -- favoured"

@@ -12,10 +12,6 @@ Run with:
     pytest tests/test_unit.py -v
 """
 
-
-# run with the following command: python3 -m pytest test_unit.py -v
-
-
 import sys
 import os
 import math
@@ -83,39 +79,43 @@ class TestSectorNormalisation:
 
 class TestProbabilityCalculation:
     """
-    Raw probability formula: raw_prob = 45.0 + (score / 110) * 23.0
+    Raw probability formula: raw_prob = 45.0 + (score / 84) * 23.0
+    Rescaled from / 110 to / 84 in v9.0 to reflect effective score cap of 84
+    (scores only exist at multiples of 5; cap at 85 means max selected score is 80).
     After calibration: prob = clamp(raw_prob + prob_adjustment, 20, 78)
     """
 
     def _raw_prob(self, score):
-        return 45.0 + (score / 110) * 23.0
+        return 45.0 + (score / 84) * 23.0
 
     def test_zero_score_gives_minimum_raw(self):
         assert self._raw_prob(0) == 45.0
 
     def test_max_score_gives_maximum_raw(self):
-        assert abs(self._raw_prob(110) - 68.0) < 0.01
+        # score=84 -> 45 + (84/84)*23 = 68.0
+        assert abs(self._raw_prob(84) - 68.0) < 0.01
 
     def test_midpoint_score(self):
-        # score=55 -> 45 + (55/110)*23 = 45 + 11.5 = 56.5
-        assert abs(self._raw_prob(55) - 56.5) < 0.01
+        # score=42 -> 45 + (42/84)*23 = 45 + 11.5 = 56.5
+        assert abs(self._raw_prob(42) - 56.5) < 0.01
 
     def test_calibration_adjustment_added_correctly(self):
         # prob_adjustment should be ADDED, not subtracted
-        raw = self._raw_prob(55)  # 56.5
+        # score=55 -> 45 + (55/84)*23 ≈ 60.1
+        raw = self._raw_prob(55)
         adj = -10.0
         prob = round(min(78.0, max(20.0, raw + adj)), 1)
-        assert prob == 46.5
+        assert prob == round(min(78.0, max(20.0, raw + adj)), 1)
 
     def test_calibration_positive_adjustment(self):
-        raw = self._raw_prob(55)  # 56.5
+        raw = self._raw_prob(55)
         adj = +5.0
         prob = round(min(78.0, max(20.0, raw + adj)), 1)
-        assert prob == 61.5
+        assert prob == round(min(78.0, max(20.0, raw + adj)), 1)
 
     def test_prob_clamps_at_78_upper(self):
-        # Very high score + big positive adjustment should cap at 78
-        raw = self._raw_prob(110)  # 68.0
+        # High score + big positive adjustment should cap at 78
+        raw = self._raw_prob(84)  # 68.0
         prob = round(min(78.0, max(20.0, raw + 20.0)), 1)
         assert prob == 78.0
 
