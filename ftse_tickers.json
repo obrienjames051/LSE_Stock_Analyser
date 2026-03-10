@@ -1,6 +1,6 @@
 {
   "ftse100": {
-    "last_updated": "2026-03-09 23:27",
+    "last_updated": "2026-03-10 07:40",
     "tickers": {
       "III.L": "FinServices",
       "ADM.L": "Insurance",
@@ -73,7 +73,6 @@
       "PSON.L": "Media",
       "PSH.L": "FinServices",
       "PSN.L": "Materials",
-      "PHNX.L": "Insurance",
       "PCT.L": "FinServices",
       "PRU.L": "Insurance",
       "RKT.L": "Materials",
@@ -94,6 +93,7 @@
       "SPX.L": "Industrials",
       "SSE.L": "Utilities",
       "STAN.L": "Banking",
+      "SDLF.L": "Insurance",
       "STJ.L": "FinServices",
       "TSCO.L": "ConsStaples",
       "BBOX.L": "RealEstate",
