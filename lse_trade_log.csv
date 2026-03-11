@@ -1,0 +1,6 @@
+week_date,ticker,sector,buy_date,buy_price_p,total_paid_gbp,shares,stamp_duty_gbp,net_invested_gbp,sell_date,sell_price_p,gross_proceeds_gbp,net_profit_gbp,net_profit_pct,status
+2026-03-10 07:40,IGG,FinServices,2026-03-10,1350.0,203.22,14.9784,1.011,202.21,,,,,,open
+2026-03-10 07:40,FGEN,FinServices,2026-03-10,74.7,167.0,222.4487,0.8308,166.17,,,,,,open
+2026-03-10 07:40,FCH,FinServices,2026-03-10,149.8,167.0,110.9273,0.8308,166.17,,,,,,open
+2026-03-10 07:40,BAG,ConsStaples,2026-03-10,680.0,146.88,21.4925,0.7307,146.15,,,,,,open
+2026-03-10 07:40,TRN,Industrials,2026-03-10,197.2,315.9,159.3957,1.5716,314.33,,,,,,open

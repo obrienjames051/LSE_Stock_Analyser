@@ -26,6 +26,7 @@ from .display import (
     print_macro_table, print_disclaimer,
 )
 from .history import show_history
+from .trade_tracker import run_trade_tracker
 from .spotlight import run_spotlight
 from .backtest import run_backtest
 from .news_log import log_news
@@ -41,7 +42,7 @@ def ask_for_mode() -> str:
         "\n[bold cyan]Run mode[/bold cyan]\n"
         "[dim]  [L] Live mode    -- results saved to CSV log (use once a week)\n"
         "  [P] Preview mode -- results shown but nothing saved\n"
-        "  [H] History      -- view a previous week's predictions and outcomes\n"
+        "  [H] History      -- view predictions, outcomes, and actual trade returns\n"
         "  [B] Backtest     -- simulate historical runs to bootstrap calibration\n"
         "  [S] Spotlight    -- full analysis on a single stock[/dim]\n"
     )
@@ -249,12 +250,31 @@ def _print_macro_warning(macro: dict, warning_level: str):
     console.print()
 
 
+def _run_history_menu():
+    """Sub-menu for History mode -- browse predictions or track actual trades."""
+    console.print(
+        "\n[bold cyan]History[/bold cyan]\n"
+        "[dim]  [P] Predictions  -- browse past run predictions and outcomes\n"
+        "  [T] Trade tracker -- log actual buy/sell prices and view real returns[/dim]\n"
+    )
+    while True:
+        raw = input("  Choose (P / T): ").strip().upper()
+        if raw in ("P", "PREDICTIONS"):
+            show_history()
+            return
+        elif raw in ("T", "TRADES", "TRADE"):
+            run_trade_tracker()
+            return
+        else:
+            console.print("  [red]Please enter P or T[/red]")
+
+
 def main():
     run_date = datetime.now().strftime("%Y-%m-%d %H:%M")
     mode     = ask_for_mode()
 
     if mode == "history":
-        show_history()
+        _run_history_menu()
         return
 
     if mode == "backtest":
