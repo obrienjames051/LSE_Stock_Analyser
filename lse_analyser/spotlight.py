@@ -244,6 +244,7 @@ def _print_spotlight_result(
     price_display  = f"{sym}{r['price'] / divisor:,.2f}"
     target_display = f"{sym}{r['target'] / divisor:,.2f}"
     stop_display   = f"{sym}{r['stop'] / divisor:,.2f}"
+    limit_display  = f"{sym}{r['limit'] / divisor:,.2f}" if r.get('limit') else target_display
 
     if is_pence:
         price_display += f"  [dim]({r['price']:.0f}p)[/dim]"
