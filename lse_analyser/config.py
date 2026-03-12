@@ -5,7 +5,8 @@ All tunable parameters and constants for the LSE Analyser.
 Edit values here to adjust the model without touching any other module.
 """
 
-CSV_FILE     = "lse_screener_log.csv"
+CSV_FILE          = "lse_screener_log.csv"
+TRADE_LOG_FILE    = "lse_trade_log.csv"
 TICKERS_JSON = "ftse_tickers.json"
 
 LOOKBACK_DAYS      = 120
@@ -52,13 +53,21 @@ CSV_HEADERS = [
     "profitable",   # 1 if actual exit price > entry price (used for calibration)
 ]
 
-NEWS_LOG_FILE = "lse_news_log.csv"
+NEWS_LOG_FILE        = "lse_news_log.csv"
+NEWS_STANDALONE_FILE = "lse_news_standalone.csv"
+NEWS_STANDALONE_HEADERS = [
+    "run_date", "mode", "ticker", "sector",
+    "company_news_score", "company_news_available", "company_headlines",
+    "sector_news_score",  "sector_news_available",  "sector_headlines",
+    "macro_score", "macro_event", "macro_available", "macro_headlines",
+]
+NEWS_MARKET_SCAN_TOP_N = 30   # Max company searches per market scan run
 NEWS_LOG_HEADERS = [
     "run_date", "ticker", "sector",
     "company_news_score", "company_news_available", "company_headlines",
     "sector_news_score", "sector_news_available", "sector_headlines",
-    "macro_score", "macro_event", "macro_available",
-    "score_adjustment",
+    "macro_score", "macro_event", "macro_available", "macro_headlines",
+    "score_adjustment", "selected",
 ]
 
 # ---------------------------------------------------------------------------
@@ -153,6 +162,7 @@ def _load_env():
 _load_env()
 
 NEWSAPI_KEY            = _os.environ.get("NEWSAPI_KEY", "")
+ANTHROPIC_API_KEY      = _os.environ.get("ANTHROPIC_API_KEY", "")
 NEWS_LOOKBACK_DAYS     = 7      # How many days of articles to fetch
 NEWS_MAX_SCORE_ADJ     = 15     # Max points added/subtracted from technical score
 NEWS_CANDIDATE_COUNT   = 20     # How many top candidates to run news analysis on
@@ -324,7 +334,7 @@ BACKTEST_CAPITAL         = 1000.0  # Arbitrary capital for Kelly sizing in backt
 
 # Baseline return confirmed from backtesting research (see RESEARCH.md)
 # Window: Tuesday open -> Monday close, stops only, no limits, 51 weeks
-BACKTEST_BASELINE_RETURN = 1.1188   # % per pick per week -- auto-updated by backtest
+BACKTEST_BASELINE_RETURN = 0.760   # % per pick per week
 
 # Calibration weights for each data source
 # Live picks are always 1.0 (the reference point)

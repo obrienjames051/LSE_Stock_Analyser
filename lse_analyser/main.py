@@ -28,6 +28,7 @@ from .display import (
 from .history import show_history
 from .trade_tracker import run_trade_tracker
 from .spotlight import run_spotlight
+from .news_mode import run_news_mode
 from .backtest import run_backtest
 from .news_log import log_news
 from .news import fetch_news_sentiment, apply_news_adjustment
@@ -44,16 +45,18 @@ def ask_for_mode() -> str:
         "  [P] Preview mode -- results shown but nothing saved\n"
         "  [H] History      -- view predictions, outcomes, and actual trade returns\n"
         "  [B] Backtest     -- simulate historical runs to bootstrap calibration\n"
-        "  [S] Spotlight    -- full analysis on a single stock[/dim]\n"
+        "  [S] Spotlight    -- full analysis on a single stock\n"
+        "  [N] News         -- market scan, sentiment dashboard, company search[/dim]\n"
     )
     while True:
-        raw = input("  Choose mode (L / P / H / B / S): ").strip().upper()
+        raw = input("  Choose mode (L / P / H / B / S / N): ").strip().upper()
         if raw in ("L", "LIVE"):        return "live"
         elif raw in ("P", "PREVIEW"):   return "preview"
         elif raw in ("H", "HISTORY"):   return "history"
         elif raw in ("B", "BACKTEST"):  return "backtest"
         elif raw in ("S", "SPOTLIGHT"): return "spotlight"
-        else: console.print("  [red]Please enter L, P, H, B, or S[/red]")
+        elif raw in ("N", "NEWS"):       return "news"
+        else: console.print("  [red]Please enter L, P, H, B, S, or N[/red]")
 
 
 def _run_company_news(candidates: list) -> list:
@@ -138,7 +141,7 @@ def _select_picks(all_results: list, macro: dict) -> tuple:
 
         if not needs_replacement:
             # All picks have acceptable sector sentiment
-            return top, sector_cache
+            return top, sector_cache, evaluated
 
         # Try surgical replacement: keep good picks, find replacements for bad ones
         good_picks    = [r for r in top if r not in needs_replacement]
@@ -199,7 +202,7 @@ def _select_picks(all_results: list, macro: dict) -> tuple:
                     break
 
         if len(final) >= TOP_N:
-            return final[:TOP_N], sector_cache
+            return final[:TOP_N], sector_cache, evaluated
 
         # Not enough candidates yet -- expand batch
         if batch_end >= len(all_results):
@@ -213,7 +216,7 @@ def _select_picks(all_results: list, macro: dict) -> tuple:
 
     # Return best available
     evaluated.sort(key=lambda x: x["score"], reverse=True)
-    return diversify(evaluated, TOP_N), sector_cache
+    return diversify(evaluated, TOP_N), sector_cache, evaluated
 
 
 def _print_macro_warning(macro: dict, warning_level: str):
@@ -285,6 +288,10 @@ def main():
         run_spotlight()
         return
 
+    if mode == "news":
+        run_news_mode()
+        return
+
     live_mode  = (mode == "live")
     mode_label = "[green]LIVE[/green]" if live_mode else "[yellow]PREVIEW[/yellow]"
 
@@ -353,7 +360,7 @@ def main():
     console.print(
         f"[dim]Running news & sector analysis on top candidates...[/dim]"
     )
-    top, sector_cache = _select_picks(all_results, macro)
+    top, sector_cache, all_evaluated = _select_picks(all_results, macro)
 
     # Finalise prob_tiers using the fully adjusted probability
     finalise_prob_tiers(top)
@@ -374,7 +381,9 @@ def main():
     # Step 10: save picks (live only) and news (always)
     # News is logged in both modes so that preview runs throughout the week
     # accumulate sentiment data for future research, independent of trade logging.
-    log_news(top, run_date, macro, sector_cache)
+    # Log news for all evaluated candidates, not just the 5 final picks.
+    # This builds a richer dataset for future research.
+    log_news(all_evaluated, run_date, macro, sector_cache)
 
     if live_mode:
         save_to_csv(top, run_date)
