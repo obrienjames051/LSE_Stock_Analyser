@@ -18,6 +18,7 @@ from rich import box
 
 from .config import CSV_FILE
 from .utils import console
+from .market_log import format_market_summary
 
 
 def load_history() -> dict:
@@ -163,12 +164,17 @@ def show_history():
         sign     = "+" if avg_ret >= 0 else ""
         dc       = "bright_green" if dir_acc >= 60 else "yellow" if dir_acc >= 40 else "red"
 
+        market_str = format_market_summary(selected_date, avg_ret if returns else None)
         console.print(
             f"\n  [bold]Run summary:[/bold]\n"
             f"  Went up (Mon close > Tue open): [{dc}]{went_up_count}/{len(resolved)}[/{dc}]  "
             f"({dir_acc:.0f}% directional accuracy)\n"
             f"  Targets hit:    [bright_green]{hits}/{len(resolved)}[/bright_green]\n"
             f"  Avg return:     [{rc}]{sign}{avg_ret:.2f}%[/{rc}]\n"
+            f"{market_str}\n"
         )
     else:
+        market_str = format_market_summary(selected_date)
         console.print("\n  [dim]No outcomes resolved yet for this run.[/dim]\n")
+        if market_str:
+            console.print(f"{market_str}\n")

@@ -7,6 +7,13 @@ Edit values here to adjust the model without touching any other module.
 
 CSV_FILE          = "lse_screener_log.csv"
 TRADE_LOG_FILE    = "lse_trade_log.csv"
+MARKET_LOG_FILE   = "lse_market_log.csv"
+MARKET_LOG_HEADERS = [
+    "week_date",
+    "ftse100_open", "ftse100_close", "ftse100_return_pct",
+    "ftse250_open", "ftse250_close", "ftse250_return_pct",
+    "resolved_date",
+]
 TICKERS_JSON = "ftse_tickers.json"
 
 LOOKBACK_DAYS      = 120

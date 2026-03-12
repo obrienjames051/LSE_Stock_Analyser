@@ -29,6 +29,7 @@ from .history import show_history
 from .trade_tracker import run_trade_tracker
 from .spotlight import run_spotlight
 from .news_mode import run_news_mode
+from .market_log import update_market_log
 from .backtest import run_backtest
 from .news_log import log_news
 from .news import fetch_news_sentiment, apply_news_adjustment
@@ -304,11 +305,13 @@ def main():
         box=box.ROUNDED,
     ))
 
-    # Step 1: resolve pending outcomes
+    # Step 1: resolve pending outcomes and update market index log
     if live_mode:
         resolve_pending_outcomes()
     else:
         console.print("[dim]Preview mode -- outcome resolution skipped.[/dim]\n")
+    with console.status("[dim]Updating market index log...[/dim]"):
+        update_market_log(run_date)
 
     # Step 2: calibration
     cal = compute_calibration()

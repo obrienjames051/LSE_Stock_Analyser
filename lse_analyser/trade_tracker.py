@@ -40,6 +40,7 @@ from rich import box
 
 from .config import CSV_FILE
 from .utils import console
+from .market_log import format_market_summary, get_market_return
 
 
 TRADE_LOG_FILE   = "lse_trade_log.csv"
@@ -468,6 +469,9 @@ def view_trade_summary():
         week_table.add_column("Total proceeds",justify="right", width=16)
         week_table.add_column("Net profit (£)",justify="right", width=15)
         week_table.add_column("Net profit %",  justify="right", width=13)
+        week_table.add_column("FTSE 100",      justify="right", width=10)
+        week_table.add_column("FTSE 250",      justify="right", width=10)
+        week_table.add_column("Alpha",         justify="right", width=10)
 
         for wd in sorted(weeks.keys()):
             wt            = weeks[wd]
@@ -476,6 +480,23 @@ def view_trade_summary():
             total_profit  = total_proc - total_paid
             profit_pct    = (total_profit / total_paid * 100) if total_paid > 0 else 0
 
+            # Market data for this week
+            mkt = get_market_return(wd)
+            def _mkt_fmt(val):
+                if val is None: return "[dim]–[/dim]"
+                c    = "bright_green" if val > 0 else "red" if val < 0 else "white"
+                sign = "+" if val >= 0 else ""
+                return f"[{c}]{sign}{val:.2f}%[/{c}]"
+
+            f100_str   = _mkt_fmt(mkt["ftse100_return_pct"] if mkt else None)
+            f250_str   = _mkt_fmt(mkt["ftse250_return_pct"] if mkt else None)
+            alpha_str  = "[dim]–[/dim]"
+            if mkt and mkt.get("ftse100_return_pct") is not None:
+                alpha     = profit_pct - mkt["ftse100_return_pct"]
+                ac        = "bright_green" if alpha > 0 else "red" if alpha < 0 else "white"
+                sign      = "+" if alpha >= 0 else ""
+                alpha_str = f"[{ac}]{sign}{alpha:.2f}pp[/{ac}]"
+
             week_table.add_row(
                 wd,
                 str(len(wt)),
@@ -483,6 +504,9 @@ def view_trade_summary():
                 f"£{total_proc:,.2f}",
                 _fmt_profit(total_profit),
                 _fmt_profit(profit_pct, "%"),
+                f100_str,
+                f250_str,
+                alpha_str,
             )
 
         console.print(week_table)
