@@ -1,6 +1,6 @@
 {
   "ftse100": {
-    "last_updated": "2026-03-17 08:24",
+    "last_updated": "2026-03-19 14:31",
     "tickers": {
       "III.L": "FinServices",
       "ADM.L": "Insurance",
@@ -21,7 +21,7 @@
       "BP.L": "Energy",
       "BATS.L": "ConsStaples",
       "BLND.L": "RealEstate",
-      "BT-A.L": "Telecoms",
+      "BT.A.L": "Telecoms",
       "BNZL.L": "Industrials",
       "BRBY.L": "ConsStaples",
       "CNA.L": "Utilities",
@@ -105,7 +105,7 @@
     }
   },
   "ftse250": {
-    "last_updated": "2026-03-16 01:09",
+    "last_updated": "2026-03-19 14:31",
     "tickers": {
       "3IN.L": "FinServices",
       "FOUR.L": "Media",
@@ -346,7 +346,7 @@
       "VOF.L": "FinServices",
       "VTY.L": "Materials",
       "FAN.L": "Materials",
-      "WPS.L": "FinServices",
+      "EWG.L": "FinServices",
       "WOSG.L": "ConsStaples",
       "JDW.L": "Leisure",
       "SMWH.L": "Retail",
