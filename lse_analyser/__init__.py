@@ -1,5 +1,5 @@
 """
-LSE Analyser v9.0
+LSE Analyser v10.0
 =================
 Screens FTSE 100/250 stocks using technical analysis to identify the 5
 most likely to rise over the next 7 calendar days.
