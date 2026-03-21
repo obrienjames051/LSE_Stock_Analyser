@@ -29,6 +29,7 @@ from .history import show_history
 from .trade_tracker import run_trade_tracker
 from .spotlight import run_spotlight
 from .news_mode import run_news_mode
+from .charts import run_charts
 from .market_log import update_market_log
 from .backtest import run_backtest
 from .news_log import log_news
@@ -47,17 +48,19 @@ def ask_for_mode() -> str:
         "  [H] History      -- view predictions, outcomes, and actual trade returns\n"
         "  [B] Backtest     -- simulate historical runs to bootstrap calibration\n"
         "  [S] Spotlight    -- full analysis on a single stock\n"
-        "  [N] News         -- market scan, sentiment dashboard, company search[/dim]\n"
+        "  [N] News         -- market scan, sentiment dashboard, company search\n"
+        "  [G] Graphs       -- price charts, weekly comparisons, stock view[/dim]\n"
     )
     while True:
-        raw = input("  Choose mode (L / P / H / B / S / N): ").strip().upper()
+        raw = input("  Choose mode (L / P / H / B / S / N / G): ").strip().upper()
         if raw in ("L", "LIVE"):        return "live"
         elif raw in ("P", "PREVIEW"):   return "preview"
         elif raw in ("H", "HISTORY"):   return "history"
         elif raw in ("B", "BACKTEST"):  return "backtest"
         elif raw in ("S", "SPOTLIGHT"): return "spotlight"
         elif raw in ("N", "NEWS"):       return "news"
-        else: console.print("  [red]Please enter L, P, H, B, S, or N[/red]")
+        elif raw in ("G", "GRAPHS"):     return "graphs"
+        else: console.print("  [red]Please enter L, P, H, B, S, N, or G[/red]")
 
 
 def _run_company_news(candidates: list) -> list:
@@ -293,11 +296,15 @@ def main():
         run_news_mode()
         return
 
+    if mode == "graphs":
+        run_charts()
+        return
+
     live_mode  = (mode == "live")
     mode_label = "[green]LIVE[/green]" if live_mode else "[yellow]PREVIEW[/yellow]"
 
     console.print(Panel(
-        f"[bold cyan]LSE Stock Screener  v9.0[/bold cyan]\n"
+        f"[bold cyan]LSE Stock Screener  v10.0[/bold cyan]\n"
         f"[dim]Run at {run_date}[/dim]  --  Mode: {mode_label}\n\n"
         "[dim]Features:  Volume filter  |  Sector diversification  |  Event filter\n"
         "          Company news  |  Macro & sector sentiment  |  "

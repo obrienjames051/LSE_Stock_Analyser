@@ -17,6 +17,7 @@ This document records the backtesting research conducted to determine the optima
 | v7.0 | Sector diversification (1 per sector) |
 | v8.0 | Tuesday open / Monday close strategy confirmed |
 | **v9.0** | **Strategy E: cap 85 div→cap selection; prob formula rescaled to /84; BACKTEST_BASELINE_RETURN auto-updated by backtest** |
+| **v10.0** | **Trade tracker, news mode, market log (FTSE 100/250 tracking), preview logging, graphs mode** |
 
 ---
 

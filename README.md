@@ -32,6 +32,7 @@ You can also run the programme on other days (e.g. Friday) in **Preview mode** â
 | **Live** | L | Run full analysis, save picks to CSV, log news data |
 | **Preview** | P | Run full analysis, display results, news saved but picks not saved |
 | **History** | H | Browse predictions [P] or track actual trades [T] |
+| **Graphs**  | G | Price charts, weekly comparisons, stock view |
 | **Backtest** | B | Simulate ~52 weeks of historical picks to bootstrap calibration |
 | **Spotlight** | S | Full single-stock analysis (not saved) |
 
@@ -101,6 +102,7 @@ Every run (Live or Preview) appends to `lse_news_log.csv`, recording the sentime
 | `lse_news_log.csv` | News sentiment audit log |
 | `lse_trade_log.csv` | Actual buy/sell trade log |
 | `lse_preview_log.csv` | Preview mode picks (all runs, no outcomes) |
+| `lse_charts/` | No files saved â€” charts open in matplotlib windows |
 | `lse_market_log.csv` | FTSE 100 and FTSE 250 weekly returns |
 | `ftse_tickers.json` | Ticker universe (auto-generated) |
 | `.env` | API keys (not committed to git) |
