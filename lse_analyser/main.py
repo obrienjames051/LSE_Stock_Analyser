@@ -20,7 +20,7 @@ from .tickers import get_tickers
 from .screener import score_ticker, has_event_in_window, diversify, finalise_prob_tiers
 from .calibration import resolve_pending_outcomes, compute_calibration, print_performance_report
 from .sizing import calculate_allocations, ask_for_capital
-from .csv_log import save_to_csv
+from .csv_log import save_to_csv, save_preview_to_csv
 from .display import (
     print_results_table, print_sizing_table, print_signal_breakdown,
     print_macro_table, print_disclaimer,
@@ -391,10 +391,12 @@ def main():
     if live_mode:
         save_to_csv(top, run_date)
     else:
+        save_preview_to_csv(top, run_date)
         console.print(
-            "[yellow]Preview mode -- picks not saved to CSV.[/yellow]\n"
-            "[dim]News sentiment saved to lse_news_log.csv.  "
-            "Run in Live mode (L) to log this week's picks.[/dim]\n"
+            "[yellow]Preview mode -- picks not saved to live log.[/yellow]\n"
+            "[dim]Preview picks saved to lse_preview_log.csv.  "
+            "News sentiment saved to lse_news_log.csv.  "
+            "Run in Live mode (L) to log this week's picks for calibration.[/dim]\n"
         )
 
     print_disclaimer()

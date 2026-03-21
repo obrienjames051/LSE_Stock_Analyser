@@ -50,6 +50,14 @@ MIN_OUTCOMES_TO_CALIBRATE = 10
 CALIBRATION_WINDOW        = 50
 MAX_CALIBRATION_SHIFT     = 15.0
 
+PREVIEW_LOG_FILE    = "lse_preview_log.csv"
+PREVIEW_LOG_HEADERS = [
+    "run_date", "ticker", "sector", "score", "price_p", "target_p",
+    "stop_p", "upside_pct", "downside_pct", "prob",
+    "reward_risk", "atr", "allocated_gbp", "allocation_pct", "shares",
+    "signals",
+]
+
 CSV_HEADERS = [
     "run_date", "ticker", "sector", "score", "price_p", "target_p",
     "stop_p", "upside_pct", "downside_pct", "prob",

@@ -100,6 +100,8 @@ Every run (Live or Preview) appends to `lse_news_log.csv`, recording the sentime
 | `lse_backtest_technical.csv` | Phase 1 backtest results |
 | `lse_news_log.csv` | News sentiment audit log |
 | `lse_trade_log.csv` | Actual buy/sell trade log |
+| `lse_preview_log.csv` | Preview mode picks (all runs, no outcomes) |
+| `lse_market_log.csv` | FTSE 100 and FTSE 250 weekly returns |
 | `ftse_tickers.json` | Ticker universe (auto-generated) |
 | `.env` | API keys (not committed to git) |
 | `RESEARCH.md` | Backtesting research and strategy rationale |
