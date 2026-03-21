@@ -434,6 +434,19 @@ A critical early discovery was that the original backtest used a single Friday s
 
 ---
 
+## Implementation Notes
+
+### NewsAPI Sector Queries
+NewsAPI's free tier matches against article titles only, not full article content. Generic sector terms like "mining sector" or "consumer staples" rarely appear verbatim in headlines, causing those sectors to return no results consistently.
+
+Two sectors use company-name OR queries as a workaround:
+- **Mining** — `"Rio Tinto OR Glencore OR Anglo American OR BHP"` — the dominant FTSE-listed miners appear in headlines reliably
+- **ConsStaples** — `"Unilever OR Diageo OR Reckitt OR Associated British Foods"` — same logic
+
+All other sectors use descriptive queries (e.g. `"UK banking sector banks"`) which work because those terms do appear naturally in financial news headlines. If a sector stops returning results in future, switching to a company-name OR query is the recommended fix. See `SECTOR_QUERIES` in `config.py`.
+
+---
+
 ## Known Limitations & Caveats
 
 - **Backtests use closing prices for stop checks**, not intraday. A stock could breach the stop intraday and recover by close; the model would not trigger. In practice, monitor live prices if possible.

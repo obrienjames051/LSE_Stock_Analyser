@@ -35,7 +35,7 @@ def print_results_table(top: list, cal: dict):
     """Print the main results table."""
     cal_note = ""
     if cal["calibrated"] and abs(cal["prob_adjustment"]) >= 1.0:
-        direction = "adjusted down" if cal["prob_adjustment"] > 0 else "adjusted up"
+        direction = "adjusted down" if cal["prob_adjustment"] < 0 else "adjusted up"
         cal_note  = (f"  [dim italic](probabilities {direction} "
                      f"{abs(cal['prob_adjustment']):.1f}pp by calibration)[/dim italic]")
 
@@ -277,10 +277,10 @@ def print_disclaimer():
         "  Sector News  Sentiment of sector-wide headlines\n"
         "  Invest (£)   Suggested amount -- the primary sizing guide\n\n"
         "[bold]Signal strength labels:[/bold]\n"
-        "  Strong signal    P(rise) >= 70% -- well above adjusted baseline\n"
-        "  Moderate signal  P(rise) >= 65%\n"
-        "  Cautious signal  P(rise) >= 60% -- at or near adjusted baseline\n"
-        "  Below floor      P(rise) < 60%  -- skip or minimal allocation\n\n"
+        "  Strong signal    P(rise) >= 55% -- well above 52% baseline\n"
+        "  Moderate signal  P(rise) >= 52% -- above baseline\n"
+        "  Cautious signal  P(rise) >= 50% -- at or near baseline\n"
+        "  Below floor      P(rise) < 50%  -- model has no edge, skip\n\n"
         "[bold]Probability of rising tiers (signal breakdown):[/bold]\n"
         "  Shows estimated probability of the stock rising by each threshold\n"
         "  based on the historical return distribution from the backtest.\n"
