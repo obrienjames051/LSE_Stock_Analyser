@@ -19,7 +19,7 @@ from .utils import console
 from .tickers import get_tickers
 from .screener import score_ticker, has_event_in_window, diversify, finalise_prob_tiers
 from .calibration import resolve_pending_outcomes, compute_calibration, print_performance_report
-from .sizing import calculate_allocations, ask_for_capital
+from .sizing import calculate_allocations, ask_for_capital, macro_kelly_multiplier
 from .csv_log import save_to_csv, save_preview_to_csv
 from .display import (
     print_results_table, print_sizing_table, print_signal_breakdown,
@@ -380,7 +380,22 @@ def main():
 
     # Step 8: capital input and position sizing
     total_capital = ask_for_capital()
-    top, deployed, reserve = calculate_allocations(top, total_capital)
+
+    # Apply macro Kelly reduction if sentiment is negative
+    macro_score  = macro.get("score", 0.0) if macro.get("available") else 0.0
+    kelly_mult   = macro_kelly_multiplier(macro_score)
+    adj_capital  = round(total_capital * kelly_mult, 2)
+
+    if kelly_mult < 1.0:
+        pct = int(kelly_mult * 100)
+        console.print(
+            f"\n  [yellow]Macro Kelly reduction applied:[/yellow] "
+            f"[bold]{pct}%[/bold] of capital deployed "
+            f"(£{adj_capital:,.2f} of £{total_capital:,.2f}) "
+            f"[dim]-- macro score {macro_score:+.2f}[/dim]\n"
+        )
+
+    top, deployed, reserve = calculate_allocations(top, adj_capital)
 
     # Step 9: display results
     print_results_table(top, cal)

@@ -4,8 +4,24 @@ sizing.py
 Kelly-based position sizing and capital input prompt.
 """
 
-from .config import PROB_FLOOR, KELLY_FRACTION, PROB_STRONG, PROB_MODERATE, PROB_CAUTIOUS
+from .config import PROB_FLOOR, KELLY_FRACTION, PROB_STRONG, PROB_MODERATE, PROB_CAUTIOUS, MACRO_KELLY_MULTIPLIERS
 from .utils import console
+
+
+def macro_kelly_multiplier(macro_score: float) -> float:
+    """
+    Return a capital multiplier (0.0-1.0) based on macro sentiment score.
+
+    During negative macro conditions the effective capital is reduced so
+    Kelly sizing becomes more conservative without changing the underlying
+    probability or Kelly fraction logic.
+
+    Thresholds and multipliers are set in MACRO_KELLY_MULTIPLIERS in config.py.
+    """
+    for threshold, multiplier in sorted(MACRO_KELLY_MULTIPLIERS):
+        if macro_score < threshold:
+            return multiplier
+    return 1.0
 
 
 def signal_label(prob: float) -> str:

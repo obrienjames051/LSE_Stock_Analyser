@@ -191,6 +191,15 @@ NEWS_FALLBACK_BATCH    = 10     # How many extra candidates to check if <5 pass 
 MACRO_WARNING_THRESHOLD = -0.4   # Show warning panel, reduce probabilities
 MACRO_SKIP_THRESHOLD    = -0.6   # Recommend skipping the week
 
+# Kelly capital multipliers applied when macro sentiment is negative.
+# Scales effective capital down without changing Kelly logic itself.
+# Thresholds align with warning/skip levels above.
+MACRO_KELLY_MULTIPLIERS = [
+    (-0.8, 0.25),   # severe:  score < -0.8  -> 25% of capital
+    (-0.6, 0.50),   # skip:    score < -0.6  -> 50% of capital
+    (-0.4, 0.75),   # warning: score < -0.4  -> 75% of capital
+]  # if score >= -0.4, multiplier = 1.0 (full capital)
+
 # How much macro sentiment can shift probabilities (pp) at maximum negative
 MACRO_MAX_PROB_SHIFT    = 15.0
 
