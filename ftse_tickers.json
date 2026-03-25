@@ -1,6 +1,6 @@
 {
   "ftse100": {
-    "last_updated": "2026-03-24 08:01",
+    "last_updated": "2026-03-25 17:04",
     "tickers": {
       "III.L": "FinServices",
       "ADM.L": "Insurance",
@@ -105,7 +105,7 @@
     }
   },
   "ftse250": {
-    "last_updated": "2026-03-24 08:01",
+    "last_updated": "2026-03-25 17:04",
     "tickers": {
       "3IN.L": "FinServices",
       "FOUR.L": "Media",
